@@ -41,7 +41,8 @@
         {
           "microphonePermission": "Mika listens when you talk to her, so she can help plan your day."
         }
-      ]
+      ],
+      "expo-asset"
     ],
     "scheme": "mikaplanner"
   }
