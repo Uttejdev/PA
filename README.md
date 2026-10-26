@@ -1,7 +1,7 @@
 # Mika Planner (voice prototype)
 
 A life planner you talk to, out loud, through an animated anime character. Mika is a supportive coach who can read and add
-to your iPhone calendar, set reminders, and keep notes. She answers in her own voice, with a facial expression and a
+to your iPhone calendar, set alarms and reminders, and keep notes. She answers in her own voice, with a facial expression and a
 gesture for every reply.
 
 ```
@@ -152,6 +152,7 @@ The app finds the server automatically: it uses the same Mac address Expo Go is 
    - "Remind me to stretch in two minutes" (iOS asks for notification permission)
    - "Save a note called book ideas: Dune and Project Hail Mary, tag it books"
    - "What notes do I have about books?"
+   - "Wake me up at seven on weekdays", or to try it now, "set an alarm for two minutes from now"
 4. Tap Mika while she's talking to cut her off. The **pause** button makes her wait quietly until you tap it again. She
    also pauses when you leave the app, and carries on when you come back. The screen stays on while she's listening.
 5. **Start over** (top left) makes her forget the conversation. Your notes, reminders and calendar stay.
@@ -165,6 +166,20 @@ Press Ctrl+C in both Terminal windows to stop. Next time, run only the `cd`, `nv
 `npx expo start` steps. You don't need to run `npm install` or copy `.env` again.
 
 ---
+
+## Alarms
+
+iPhone apps can't set alarms in Apple's Clock app, so Mika has her own. Ask her ("wake me up at 6:30 tomorrow", "weekday
+alarm at 7", "cancel my 7 o'clock alarm"), or tap **Alarms** (top right) to see, switch off or delete them.
+
+- **With the app open** (for example on your nightstand, plugged in; the screen stays on): a looping chime plays **even in
+  silent mode**, then Mika wakes you by voice. Tap **Stop**, or **Snooze** for 9 minutes.
+- **With the app closed or in the background:** you get an alarm notification every minute for 4 minutes. Tap it, or its
+  Stop/Snooze buttons, to open Mika. These use the normal notification sound, so **silent mode and Focus will mute them**.
+
+For a real alarm clock, keep the app open overnight. An alarm that rings through silent mode with the app closed needs
+Apple's AlarmKit (iOS 26), which only works in a standalone build of the app, not in Expo Go. That's planned for when the
+app becomes a development build.
 
 ## Troubleshooting
 
@@ -215,6 +230,8 @@ peer dependencies. The `.npmrc` file in each folder already works around it, so 
 - **Mika's voice**: set `BOSON_VOICE` in `server/.env`, for example `chloe` (friendly), `nora` (calm) or `eleanor`
   (professional), then restart the server. Boson also supports custom and cloned voices.
 - **How quickly she answers after you stop talking**: change `silenceEndMs` in `app/src/voice/vad.ts`.
+- **Alarm sound**: edit and run `python3 scripts/make-alarm-sound.py` (from `app/`), or replace
+  `app/assets/sounds/alarm.wav`.
 - **Tools Claude can use**: the schemas are in `server/src/schema.ts`, and the code that runs on the phone is in `app/src/tools/`.
 
 To tweak the character on your Mac without the phone, preview it in a browser (from the `app` folder):

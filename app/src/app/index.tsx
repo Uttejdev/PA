@@ -2,7 +2,10 @@ import { Link, Stack } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Alert, Animated, Easing, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SNOOZE_MINUTES } from "../alarms/store";
+import { useAlarmRinger, wakeUpLine } from "../alarms/useAlarmRinger";
 import { CharacterView, type CharacterHandle } from "../character/CharacterView";
+import { loadProfile } from "../lib/profile";
 import { useVoiceConversation, type VoiceState } from "../voice/useVoiceConversation";
 
 const LABELS: Record<VoiceState, string> = {
@@ -22,6 +25,38 @@ export default function TalkScreen() {
   const voice = useVoiceConversation(character);
   const on = !voice.paused;
   const pulse = usePulse(voice.state === "listening" || voice.state === "hearing", voice.state === "hearing");
+
+  // When an alarm goes off: stop listening, let the chime ring, then Mika
+  // wakes you up by voice over a quieter chime until you stop or snooze.
+  const ringId = useRef(0);
+  const alarm = useAlarmRinger({
+    onRing: (r) => {
+      const id = ++ringId.current;
+      voice.pause();
+      character.current?.react("excited", "wave");
+      setTimeout(async () => {
+        if (ringId.current !== id || !alarmRef.current.ringing) return;
+        const profile = await loadProfile();
+        alarmRef.current.duck(true);
+        await voice.say(wakeUpLine(r, profile.name));
+        alarmRef.current.duck(false);
+      }, 3000);
+    },
+    onDone: async (how) => {
+      ringId.current++;
+      if (how === "snooze") {
+        character.current?.react("calm", "nod");
+        await voice.say(`Okay, ${SNOOZE_MINUTES} more minutes.`);
+        return; // stay paused so she doesn't listen while you doze
+      }
+      character.current?.react("happy", "nod");
+      voice.resume();
+    },
+  });
+  const alarmRef = useRef(alarm);
+  useEffect(() => {
+    alarmRef.current = alarm;
+  });
 
   function newChat() {
     Alert.alert("Start a new conversation?", "Mika will forget what you've talked about. Your notes, reminders and calendar stay.", [
@@ -47,11 +82,18 @@ export default function TalkScreen() {
             </Pressable>
           ),
           headerRight: () => (
-            <Link href="/profile" asChild>
-              <Pressable hitSlop={10}>
-                <Text style={styles.headerButton}>Profile</Text>
-              </Pressable>
-            </Link>
+            <View style={styles.headerRight}>
+              <Link href="/alarms" asChild>
+                <Pressable hitSlop={10}>
+                  <Text style={styles.headerButton}>Alarms</Text>
+                </Pressable>
+              </Link>
+              <Link href="/profile" asChild>
+                <Pressable hitSlop={10}>
+                  <Text style={styles.headerButton}>Profile</Text>
+                </Pressable>
+              </Link>
+            </View>
           ),
         }}
       />
@@ -62,6 +104,20 @@ export default function TalkScreen() {
           <Pressable style={StyleSheet.absoluteFill} onPress={voice.interrupt} disabled={voice.state !== "speaking"} />
         </View>
 
+        {alarm.ringing ? (
+          <View style={[styles.alarmPanel, { paddingBottom: insets.bottom + 24 }]}>
+            <Text style={styles.alarmTime}>{clock(alarm.ringing.occurrence)}</Text>
+            <Text style={styles.alarmLabel}>{alarm.ringing.alarm.label}</Text>
+            <View style={styles.alarmButtons}>
+              <Pressable style={({ pressed }) => [styles.alarmButton, styles.snooze, pressed && styles.pressed]} onPress={alarm.snooze}>
+                <Text style={styles.alarmButtonText}>Snooze {SNOOZE_MINUTES} min</Text>
+              </Pressable>
+              <Pressable style={({ pressed }) => [styles.alarmButton, styles.stop, pressed && styles.pressed]} onPress={alarm.stop}>
+                <Text style={styles.alarmButtonText}>Stop</Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : (
         <View style={[styles.controls, { paddingBottom: insets.bottom + 24 }]}>
           <Text style={styles.label}>{voice.detail ?? LABELS[voice.state]}</Text>
           <View style={styles.buttonWrap}>
@@ -78,10 +134,16 @@ export default function TalkScreen() {
           </View>
           <Text style={styles.hint}>{on ? "Pause" : "Resume"}</Text>
         </View>
+        )}
       </View>
     </>
   );
 }
+
+const clock = (ms: number) => {
+  const d = new Date(ms);
+  return `${d.getHours() % 12 === 0 ? 12 : d.getHours() % 12}:${String(d.getMinutes()).padStart(2, "0")}`;
+};
 
 // Breathing ring around the mic while Mika listens; bigger while you speak.
 function usePulse(active: boolean, strong: boolean) {
@@ -137,4 +199,13 @@ const styles = StyleSheet.create({
   buttonIcon: { fontSize: 28, color: "white", fontWeight: "700" },
   hint: { fontSize: 13, color: "#8a80a8" },
   headerButton: { color: "#5b4b8a", fontSize: 16 },
+  headerRight: { flexDirection: "row", gap: 16 },
+  alarmPanel: { alignItems: "center", paddingTop: 16, gap: 6, backgroundColor: "#fff6e8" },
+  alarmTime: { fontSize: 56, fontWeight: "700", color: "#3d2f66", fontVariant: ["tabular-nums"] },
+  alarmLabel: { fontSize: 18, color: "#5b4b8a", marginBottom: 12 },
+  alarmButtons: { flexDirection: "row", gap: 14, paddingHorizontal: 20 },
+  alarmButton: { flex: 1, paddingVertical: 20, borderRadius: 18, alignItems: "center" },
+  snooze: { backgroundColor: "#7c5cd6" },
+  stop: { backgroundColor: "#e0566b" },
+  alarmButtonText: { color: "white", fontSize: 19, fontWeight: "700" },
 });

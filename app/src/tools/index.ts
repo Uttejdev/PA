@@ -1,3 +1,4 @@
+import { cancelAlarm, listAlarms, setAlarm } from "./alarms";
 import { createEvent, listEvents } from "./calendar";
 import { createNote, searchNotes } from "./notes";
 import { createReminder, listReminders } from "./reminders";
@@ -11,6 +12,9 @@ type Handlers = {
   reminder_list: (i: Record<string, never>) => Promise<unknown>;
   note_create: (i: { title: string; body: string; tags: string[] }) => Promise<unknown>;
   note_search: (i: { query: string }) => Promise<unknown>;
+  alarm_set: (i: { time: string; label: string; repeat: string }) => Promise<unknown>;
+  alarm_list: (i: Record<string, never>) => Promise<unknown>;
+  alarm_cancel: (i: { id: number }) => Promise<unknown>;
 };
 
 const handlers: Handlers = {
@@ -20,6 +24,9 @@ const handlers: Handlers = {
   reminder_list: listReminders,
   note_create: createNote,
   note_search: searchNotes,
+  alarm_set: setAlarm,
+  alarm_list: listAlarms,
+  alarm_cancel: cancelAlarm,
 };
 
 export type ToolOutcome = { ok: true; result: unknown } | { ok: false; error: string };
@@ -42,4 +49,7 @@ export const TOOL_LABELS: Record<string, string> = {
   reminder_list: "Looking at your reminders",
   note_create: "Saving a note",
   note_search: "Searching your notes",
+  alarm_set: "Setting an alarm",
+  alarm_list: "Checking your alarms",
+  alarm_cancel: "Cancelling an alarm",
 };

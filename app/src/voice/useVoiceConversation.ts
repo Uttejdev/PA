@@ -271,6 +271,17 @@ export function useVoiceConversation(character: RefObject<CharacterHandle | null
     endPlayback.current?.();
   }, [player]);
 
+  /** Speak a line without listening afterwards (e.g. over a ringing alarm). */
+  const say = useCallback(async (text: string) => {
+    try {
+      await play(await speak(text));
+    } catch (err) {
+      log(`say failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    if (!active.current) setState("paused");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   /** Forget the conversation so far (notes, reminders and calendar stay). */
   const resetHistory = useCallback(async () => {
     history.current = [];
@@ -310,5 +321,5 @@ export function useVoiceConversation(character: RefObject<CharacterHandle | null
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return { state, detail, paused: state === "paused", pause, resume, interrupt, resetHistory };
+  return { state, detail, paused: state === "paused", pause, resume, interrupt, say, resetHistory };
 }

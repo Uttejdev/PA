@@ -36,6 +36,9 @@ export const TOOL_NAMES = [
   "reminder_list",
   "note_create",
   "note_search",
+  "alarm_set",
+  "alarm_list",
+  "alarm_cancel",
 ] as const;
 export type ToolName = (typeof TOOL_NAMES)[number];
 
@@ -130,6 +133,41 @@ export const tools: Anthropic.Beta.Messages.BetaTool[] = [
       type: "object",
       properties: { query: { type: "string" } },
       required: ["query"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "alarm_set",
+    description:
+      "Set an alarm in this app. Mika rings it loudly and wakes the user up by voice, with stop and snooze. Use this " +
+      "(not reminder_create) for alarms, wake-ups, and anything the user wants to ring. For a repeating alarm, `time` " +
+      "is the first ring and only its time of day is used.",
+    strict: true,
+    input_schema: {
+      type: "object",
+      properties: {
+        time: isoDateTime("When the alarm rings"),
+        label: { type: "string", description: "Short label, e.g. 'Wake up' or 'Leave for the airport'" },
+        repeat: { type: "string", enum: ["none", "daily", "weekdays", "weekends"] },
+      },
+      required: ["time", "label", "repeat"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "alarm_list",
+    description: "List the user's alarms with their ids, times, repeat pattern and next ring time.",
+    strict: true,
+    input_schema: { type: "object", properties: {}, required: [], additionalProperties: false },
+  },
+  {
+    name: "alarm_cancel",
+    description: "Delete an alarm by id. Call alarm_list first if you don't know the id.",
+    strict: true,
+    input_schema: {
+      type: "object",
+      properties: { id: { type: "integer" } },
+      required: ["id"],
       additionalProperties: false,
     },
   },

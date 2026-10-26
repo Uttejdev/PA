@@ -30,6 +30,17 @@ async function open() {
       notification_id TEXT,
       created_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS alarms (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      label TEXT NOT NULL,
+      hour INTEGER NOT NULL,
+      minute INTEGER NOT NULL,
+      repeat TEXT NOT NULL DEFAULT 'none',
+      once_at INTEGER,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      dismissed_until INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL
+    );
   `);
   return db;
 }
