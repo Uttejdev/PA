@@ -77,6 +77,15 @@ describe("voice routes", () => {
       expect((await fetch(`${url}/transcribe`, { method: "POST", headers: { "content-type": "audio/mp4" } })).status).toBe(400);
     }));
 
+  it("POST /speak returns playable audio for a fixed line", () =>
+    withServer(async (url, boson) => {
+      const data = await (await post(`${url}/speak`, { text: "Good morning!" })).json();
+      expect(JSON.parse(boson.requests[0].init.body as string).input).toBe("Good morning!");
+      const audio = await fetch(`${url}${data.audioUrl}`);
+      expect(Buffer.from(await audio.arrayBuffer())).toEqual(MP3);
+      expect((await post(`${url}/speak`, { text: "" })).status).toBe(400);
+    }));
+
   it("unknown audio ids are 404", () =>
     withServer(async (url) => {
       expect((await fetch(`${url}/audio/nope`)).status).toBe(404);

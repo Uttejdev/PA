@@ -20,8 +20,8 @@ server/   Small Node server that holds your API keys and talks to Claude and Bos
    Boson's text-to-speech (`higgs-tts-3`, voice `chloe`). The app plays it, moves her mouth with the voice's volume, sets her
    face (for example `happy` raises her smile, eye squint and blush), and plays the gesture (`wave`, `nod`, `cheer`, and
    so on).
-5. When she finishes talking, she listens again, hands-free, like a phone call. If nobody speaks for 20 seconds she stops
-   listening. Tap her while she's talking to cut her off, and tap the red button to end the conversation.
+5. When she finishes talking, she listens again, hands-free, like a phone call. She greets you when the app opens and keeps
+   listening until you pause her. Tap her while she's talking to cut her off.
 
 Your API keys stay in `server/.env` on your Mac. It is never put inside the app. Notes, reminders, your profile and the chat
 history are stored only on the phone, in SQLite. Recordings are sent to the server only to be transcribed, and aren't kept.
@@ -145,14 +145,15 @@ The app finds the server automatically: it uses the same Mac address Expo Go is 
 
 1. When iOS asks to find devices on your **local network**, tap **Allow**. That's how the app reaches the server.
 2. Tap **Profile** (top right). Fill in your name, goals and routines, then tap Save. Mika knows this every time you talk.
-3. Tap the purple **mic** button and allow the **microphone**. When the ring pulses, she's listening. Just talk, then pause,
-   and she answers out loud and listens again. Try:
+3. Allow the **microphone**. Mika greets you out loud and starts listening on her own, with no button to press. When the
+   ring pulses, she's listening. Just talk, then pause, and she answers out loud and listens again. Try:
    - "What's on my calendar tomorrow?" (iOS asks for calendar access the first time)
    - "Add a thirty-minute run on Thursday at seven a.m."
    - "Remind me to stretch in two minutes" (iOS asks for notification permission)
    - "Save a note called book ideas: Dune and Project Hail Mary, tag it books"
    - "What notes do I have about books?"
-4. Tap Mika while she's talking to cut her off. Tap the red button to end the conversation.
+4. Tap Mika while she's talking to cut her off. The **pause** button makes her wait quietly until you tap it again. She
+   also pauses when you leave the app, and carries on when you come back. The screen stays on while she's listening.
 5. **Start over** (top left) makes her forget the conversation. Your notes, reminders and calendar stay.
 
 Each reply takes about 5–8 seconds after you stop talking: about half a second to understand you, 2–4 seconds for Claude

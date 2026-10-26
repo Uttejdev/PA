@@ -48,6 +48,17 @@ export function createApp(runTurn: TurnRunner, voiceDeps?: VoiceDeps) {
     }
   });
 
+  // Speak a fixed line (e.g. the greeting when the app opens) without asking Claude.
+  app.post("/speak", async (req, res) => {
+    const text = typeof req.body?.text === "string" ? req.body.text.trim() : "";
+    if (!voiceDeps || !text || text.length > 500) {
+      res.status(400).json({ error: voiceDeps ? "send { text } (up to 500 characters)" : "voice is not configured" });
+      return;
+    }
+    log("mika", text);
+    res.json({ audioUrl: `/audio/${voiceDeps.clips.add(voiceDeps.voice.synthesize(text))}` });
+  });
+
   // Body is the raw recording, e.g. Content-Type: audio/mp4 for the iPhone's .m4a.
   app.post("/transcribe", express.raw({ type: "audio/*", limit: "15mb" }), async (req, res) => {
     if (!voiceDeps) {

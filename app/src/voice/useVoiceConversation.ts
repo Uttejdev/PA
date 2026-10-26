@@ -9,17 +9,20 @@ import {
   type RecordingOptions,
 } from "expo-audio";
 import { File } from "expo-file-system";
+import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { AppState } from "react-native";
 import type { CharacterHandle } from "../character/CharacterView";
-import { audioUrl, callServer, transcribe } from "../chat/api";
+import { audioUrl, callServer, speak, transcribe } from "../chat/api";
 import { runUserTurn, type ApiMessage } from "../chat/conversation";
 import { loadConversation, MAX_HISTORY_MESSAGES, saveConversation, type ChatLine } from "../chat/store";
+import { serverUrl } from "../lib/config";
 import { loadProfile } from "../lib/profile";
 import { runTool, TOOL_LABELS } from "../tools";
+import { greeting } from "./greeting";
 import { Vad } from "./vad";
 
-export type VoiceState = "off" | "listening" | "hearing" | "transcribing" | "thinking" | "speaking";
+export type VoiceState = "starting" | "paused" | "listening" | "hearing" | "transcribing" | "thinking" | "speaking";
 
 // Small mono AAC files: plenty for speech recognition, quick to upload.
 const RECORDING: RecordingOptions = {
@@ -36,22 +39,29 @@ const RECORDING: RecordingOptions = {
 const POLL_MS = 100;
 const PLAYBACK_START_TIMEOUT_MS = 15_000;
 const PLAYBACK_MAX_MS = 120_000;
+const KEEP_AWAKE_TAG = "mika-conversation";
+
+// Shows in the Expo window on the Mac, to see where a voice turn gets stuck.
+const log = (msg: string) => console.log(`[voice] ${msg}`);
 
 let lineSeq = 0;
 const line = (from: ChatLine["from"], text: string): ChatLine => ({ id: `${Date.now()}-${lineSeq++}`, from, text });
 
-// Hands-free conversation: listen until the user stops talking, transcribe,
-// let Claude answer (running tools on the phone), play Mika's voice, then
-// listen again. Mika never listens while she's talking, so she can't hear
-// herself; tapping her while she talks skips to listening.
+// Always-on, hands-free conversation. When the app opens Mika greets you and
+// starts listening; each time you stop talking she transcribes, lets Claude
+// answer (running tools on the phone), speaks, and listens again. She never
+// listens while she's talking, so she can't hear herself. Pause makes her
+// wait; tapping her while she talks skips to your turn.
 export function useVoiceConversation(character: RefObject<CharacterHandle | null>) {
   const recorder = useAudioRecorder(RECORDING);
   const player = useAudioPlayer(null);
-  const [state, setStateValue] = useState<VoiceState>("off");
+  const [state, setStateValue] = useState<VoiceState>("starting");
   const [detail, setDetail] = useState<string | null>(null);
 
-  const stateRef = useRef<VoiceState>("off");
+  const stateRef = useRef<VoiceState>("starting");
   const active = useRef(false);
+  const greeted = useRef(false);
+  const pausedByBackground = useRef(false);
   const history = useRef<ApiMessage[]>([]);
   const lines = useRef<ChatLine[]>([]);
   const poll = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -59,16 +69,10 @@ export function useVoiceConversation(character: RefObject<CharacterHandle | null
   const lastMouth = useRef(0);
 
   const setState = (s: VoiceState) => {
+    if (stateRef.current !== s) log(`state: ${s}`);
     stateRef.current = s;
     setStateValue(s);
   };
-
-  useEffect(() => {
-    loadConversation().then((c) => {
-      history.current = c.history;
-      lines.current = c.lines;
-    });
-  }, []);
 
   // Lip sync: turn the playing voice's volume into mouth openness.
   useAudioSampleListener(player, (sample) => {
@@ -108,17 +112,18 @@ export function useVoiceConversation(character: RefObject<CharacterHandle | null
     if (recorder.isRecording) await recorder.stop();
   };
 
-  const stop = useCallback(async (message: string | null = null) => {
+  const pauseInternal = async (reason: string, message: string | null) => {
+    log(`pause (${reason})`);
     active.current = false;
     await stopRecording().catch(() => {});
     player.pause();
     endPlayback.current?.();
     character.current?.stopSpeaking();
-    setState("off");
+    setState("paused");
     setDetail(message);
+    deactivateKeepAwake(KEEP_AWAKE_TAG).catch(() => {});
     await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }).catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [player, character]);
+  };
 
   const play = (path: string) =>
     new Promise<void>((resolve, reject) => {
@@ -135,6 +140,7 @@ export function useVoiceConversation(character: RefObject<CharacterHandle | null
         clearInterval(watchdog);
         endPlayback.current = null;
         character.current?.stopSpeaking();
+        log(err ? `playback failed: ${err.message}` : "playback done");
         if (err) reject(err);
         else resolve();
       };
@@ -142,16 +148,26 @@ export function useVoiceConversation(character: RefObject<CharacterHandle | null
       // Playback-only audio mode, so the voice comes out of the main speaker.
       setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true })
         .then(() => {
+          log(`playing ${path}`);
           player.replace({ uri: audioUrl(path) });
           player.play();
         })
         .catch((e) => finish(e instanceof Error ? e : new Error(String(e))));
     });
 
+  const fail = (err: unknown) => {
+    const message = err instanceof Error ? err.message : String(err);
+    log(`error: ${message}`);
+    character.current?.react("worried", "tilt_head");
+    pauseInternal("error", `${message} Tap Resume to try again.`);
+  };
+
   const handleUtterance = async (uri: string) => {
     setState("transcribing");
     const audio = await new File(uri).arrayBuffer();
+    log(`sending ${(audio.byteLength / 1024).toFixed(0)} KB of audio`);
     const text = await transcribe(audio, "audio/mp4");
+    log(`heard: ${text || "(nothing)"}`);
     if (!active.current) return;
     if (!text) return listen(); // just noise
 
@@ -181,23 +197,28 @@ export function useVoiceConversation(character: RefObject<CharacterHandle | null
 
   const listen = async (): Promise<void> => {
     if (!active.current) return;
+    await stopRecording();
     await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
     await recorder.prepareToRecordAsync();
     recorder.record();
     setState("listening");
     const vad = new Vad();
-    clearPoll();
+    let ticks = 0;
     poll.current = setInterval(() => {
-      const event = vad.push(recorder.getStatus().metering, Date.now());
+      const status = recorder.getStatus();
+      // Every few seconds, show what the mic hears (dB: -160 silent … 0 loud).
+      if (ticks++ % 30 === 0) log(`mic: ${status.metering === undefined ? "no level" : status.metering.toFixed(0) + " dB"}`);
+      const event = vad.push(status.metering, Date.now());
       if (event === "speech_start") setState("hearing");
       if (event === "no_speech") {
-        stop("Tap the mic when you want to talk.");
+        // Nobody spoke for a while: throw that recording away and keep listening.
+        listen().catch(fail);
       } else if (event === "speech_end") {
         clearPoll();
         recorder
           .stop()
           .then(() => {
-            if (!recorder.uri) throw new Error("The recording didn't save. Try again?");
+            if (!recorder.uri) throw new Error("The recording didn't save.");
             return handleUtterance(recorder.uri);
           })
           .catch(fail);
@@ -205,24 +226,43 @@ export function useVoiceConversation(character: RefObject<CharacterHandle | null
     }, POLL_MS);
   };
 
-  const fail = (err: unknown) => {
-    character.current?.react("worried", "tilt_head");
-    stop(err instanceof Error ? err.message : String(err));
-  };
-
-  const start = useCallback(async () => {
+  const begin = async () => {
     if (active.current) return;
     const perm = await requestRecordingPermissionsAsync();
+    log(`mic permission: ${perm.status}, server: ${serverUrl()}`);
     if (!perm.granted) {
-      setDetail("Mika needs the microphone. Allow it in iPhone Settings, then try again.");
+      setState("paused");
+      setDetail("Mika needs the microphone. Allow it in iPhone Settings → Expo Go, then tap Resume.");
       return;
     }
     active.current = true;
     setDetail(null);
-    character.current?.react("happy", "none");
-    listen().catch(fail);
+    activateKeepAwakeAsync(KEEP_AWAKE_TAG).catch(() => {});
+    if (!greeted.current) {
+      greeted.current = true;
+      const profile = await loadProfile();
+      character.current?.react("happy", "wave");
+      try {
+        await play(await speak(greeting(profile.name)));
+      } catch (err) {
+        // A missing greeting shouldn't stop her from listening.
+        log(`greeting failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+    await listen();
+  };
+
+  const resume = useCallback(() => {
+    pausedByBackground.current = false;
+    begin().catch(fail);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [character]);
+  }, []);
+
+  const pause = useCallback(() => {
+    pausedByBackground.current = false;
+    pauseInternal("button", null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /** Skip the rest of Mika's reply and listen right away. */
   const interrupt = useCallback(() => {
@@ -238,13 +278,37 @@ export function useVoiceConversation(character: RefObject<CharacterHandle | null
     await saveConversation({ history: [], lines: [] });
   }, []);
 
-  // Stop listening when the app leaves the screen.
+  // Start talking as soon as the screen opens.
+  useEffect(() => {
+    loadConversation()
+      .then((c) => {
+        history.current = c.history;
+        lines.current = c.lines;
+      })
+      .finally(() => begin().catch(fail));
+    return () => {
+      active.current = false;
+      clearPoll();
+      deactivateKeepAwake(KEEP_AWAKE_TAG).catch(() => {});
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Only a real switch away from the app pauses her ("inactive" also fires for
+  // brief things like Control Center or a banner). She resumes when you return.
   useEffect(() => {
     const sub = AppState.addEventListener("change", (s) => {
-      if (s !== "active" && active.current) stop(null);
+      if (s === "background" && active.current) {
+        pausedByBackground.current = true;
+        pauseInternal("app in background", null);
+      } else if (s === "active" && pausedByBackground.current) {
+        pausedByBackground.current = false;
+        begin().catch(fail);
+      }
     });
     return () => sub.remove();
-  }, [stop]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  return { state, detail, start, stop: () => stop(null), interrupt, resetHistory };
+  return { state, detail, paused: state === "paused", pause, resume, interrupt, resetHistory };
 }

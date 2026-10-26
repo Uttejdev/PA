@@ -40,3 +40,13 @@ export async function transcribe(audio: ArrayBuffer, mimeType = "audio/mp4"): Pr
 
 /** Full URL for a server-relative audio path like /audio/abc. */
 export const audioUrl = (path: string) => `${serverUrl()}${path}`;
+
+/** Has the server speak a fixed line; returns a server-relative audio path. */
+export async function speak(text: string): Promise<string> {
+  const data = await request(
+    "/speak",
+    { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text }) },
+    TRANSCRIBE_TIMEOUT_MS,
+  );
+  return String(data.audioUrl);
+}

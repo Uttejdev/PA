@@ -1,5 +1,6 @@
 /// <reference types="jest" />
 import { runUserTurn } from "../chat/conversation";
+import { greeting } from "../voice/greeting";
 import { Vad, type VadEvent } from "../voice/vad";
 
 // Feeds a timeline of [durationMs, dB] segments at 100ms steps; returns events with times.
@@ -93,5 +94,13 @@ describe("voice turns", () => {
     );
     expect(bodies[0].voice).toBe(true);
     expect(res.audioUrl).toBe("/audio/abc");
+  });
+});
+
+describe("greeting", () => {
+  it("greets by time of day and first name", () => {
+    expect(greeting("Uttej Kotyada", new Date(2026, 9, 27, 8, 0), 0)).toBe("Good morning, Uttej! What's on your mind?");
+    expect(greeting("", new Date(2026, 9, 27, 20, 0), 0.99)).toBe("Good evening! I'm listening whenever you're ready.");
+    expect(greeting("Uttej", new Date(2026, 9, 27, 2, 0), 0)).toMatch(/^Hey, you're up late, Uttej!/);
   });
 });

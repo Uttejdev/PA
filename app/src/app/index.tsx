@@ -6,7 +6,8 @@ import { CharacterView, type CharacterHandle } from "../character/CharacterView"
 import { useVoiceConversation, type VoiceState } from "../voice/useVoiceConversation";
 
 const LABELS: Record<VoiceState, string> = {
-  off: "Tap to talk to Mika",
+  starting: "Waking up…",
+  paused: "Paused. Mika will wait for you.",
   listening: "Listening…",
   hearing: "I'm listening…",
   transcribing: "Got it…",
@@ -14,12 +15,12 @@ const LABELS: Record<VoiceState, string> = {
   speaking: "Tap Mika to interrupt",
 };
 
-// Voice-only: Mika fills the screen; one button starts and ends the conversation.
+// Voice-only: Mika fills the screen and listens on her own; one button pauses her.
 export default function TalkScreen() {
   const character = useRef<CharacterHandle>(null);
   const insets = useSafeAreaInsets();
   const voice = useVoiceConversation(character);
-  const on = voice.state !== "off";
+  const on = !voice.paused;
   const pulse = usePulse(voice.state === "listening" || voice.state === "hearing", voice.state === "hearing");
 
   function newChat() {
@@ -29,7 +30,6 @@ export default function TalkScreen() {
         text: "Start over",
         style: "destructive",
         onPress: async () => {
-          await voice.stop();
           await voice.resetHistory();
           character.current?.react("happy", "wave");
         },
@@ -67,15 +67,16 @@ export default function TalkScreen() {
           <View style={styles.buttonWrap}>
             <Animated.View style={[styles.ring, { transform: [{ scale: pulse }], opacity: on ? 1 : 0 }]} />
             <Pressable
-              onPress={on ? voice.stop : voice.start}
-              style={({ pressed }) => [styles.button, on && styles.buttonOn, pressed && styles.pressed]}
+              onPress={on ? voice.pause : voice.resume}
+              disabled={voice.state === "starting"}
+              style={({ pressed }) => [styles.button, !on && styles.buttonPaused, pressed && styles.pressed]}
               accessibilityRole="button"
-              accessibilityLabel={on ? "End conversation" : "Talk to Mika"}
+              accessibilityLabel={on ? "Pause conversation" : "Resume conversation"}
             >
-              <Text style={styles.buttonIcon}>{on ? "■" : "🎙"}</Text>
+              <Text style={styles.buttonIcon}>{on ? "❚❚" : "▶"}</Text>
             </Pressable>
           </View>
-          <Text style={styles.hint}>{on ? "Tap to end" : " "}</Text>
+          <Text style={styles.hint}>{on ? "Pause" : "Resume"}</Text>
         </View>
       </View>
     </>
@@ -131,9 +132,9 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
   },
-  buttonOn: { backgroundColor: "#e0566b" },
+  buttonPaused: { backgroundColor: "#4caf7d" },
   pressed: { transform: [{ scale: 0.95 }] },
-  buttonIcon: { fontSize: 34, color: "white" },
+  buttonIcon: { fontSize: 28, color: "white", fontWeight: "700" },
   hint: { fontSize: 13, color: "#8a80a8" },
   headerButton: { color: "#5b4b8a", fontSize: 16 },
 });
