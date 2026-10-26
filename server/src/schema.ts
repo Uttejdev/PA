@@ -1,7 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 
-// The app maps `emotion` to a VRM expression and `gesture` to an animation.
+// The app maps `emotion` to a Live2D face pose and `gesture` to a movement.
 // Keep these lists in sync with app/src/character/mapping.ts.
 export const EMOTIONS = ["happy", "worried", "thinking", "excited", "calm", "sad", "surprised"] as const;
 export const GESTURES = ["nod", "wave", "tilt_head", "cheer", "think", "none"] as const;

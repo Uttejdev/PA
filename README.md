@@ -5,7 +5,7 @@ to your iPhone calendar, set reminders, and keep notes. She answers in her own v
 gesture for every reply.
 
 ```
-app/      Expo (React Native) app: voice screen, 3D character, on-device tools, SQLite
+app/      Expo (React Native) app: voice screen, 2D Live2D character, on-device tools, SQLite
 server/   Small Node server that holds your API keys and talks to Claude and Boson (voice)
 ```
 
@@ -18,7 +18,7 @@ server/   Small Node server that holds your API keys and talks to Claude and Bos
    the result back through the server, and this repeats until Claude replies.
 4. Every final reply is structured JSON: `{ "text", "emotion", "gesture" }`. The server turns the text into Mika's voice with
    Boson's text-to-speech (`higgs-tts-3`, voice `chloe`). The app plays it, moves her mouth with the voice's volume, sets her
-   face (for example `happy`, which maps to the VRM "happy" expression), and plays the gesture (`wave`, `nod`, `cheer`, and
+   face (for example `happy` raises her smile, eye squint and blush), and plays the gesture (`wave`, `nod`, `cheer`, and
    so on).
 5. When she finishes talking, she listens again, hands-free, like a phone call. If nobody speaks for 20 seconds she stops
    listening. Tap her while she's talking to cut her off, and tap the red button to end the conversation.
@@ -26,8 +26,15 @@ server/   Small Node server that holds your API keys and talks to Claude and Bos
 Your API keys stay in `server/.env` on your Mac. It is never put inside the app. Notes, reminders, your profile and the chat
 history are stored only on the phone, in SQLite. Recordings are sent to the server only to be transcribed, and aren't kept.
 
-The character is a free sample VRM model rendered with three.js and three-vrm inside a WebView. It breathes, blinks, sways
-a little, and moves its mouth while she talks.
+The character is **Hiyori**, a free official Live2D sample model, rendered in 2D with pixi-live2d-display inside a WebView.
+She breathes, blinks, sways through her idle animations, and moves her mouth while she talks.
+
+**Licences:** the Hiyori model is under the
+[Live2D Free Material License](https://www.live2d.com/eula/live2d-free-material-license-agreement_en.html). The Live2D Cubism
+Core runtime, which loads from Live2D's website, is under the
+[Live2D Proprietary Software License](https://www.live2d.com/eula/live2d-proprietary-software-license-agreement_en.html).
+Both are free for individuals and small businesses. Before you publish the app, check the
+[SDK release licence](https://www.live2d.com/en/sdk/license/), which depends on your company's revenue.
 
 ---
 
@@ -183,7 +190,7 @@ errors, check `BOSON_API_KEY` in `server/.env` and restart the server.
 **"You need to be signed in to Expo Go and Expo CLI"**: run `npx expo login` on the Mac, and log in to the Expo Go app with
 the same account.
 
-**The character says "Couldn't load the character"**: the 3D model (about 10 MB) and three.js load from the internet the
+**The character says "Couldn't load the character"**: the Live2D model (about 3 MB) and its runtime load from the internet the
 first time, so the phone needs internet access.
 
 **Expo Go says the project uses an unsupported SDK**: update Expo Go from the App Store. This project uses Expo SDK 58.
@@ -196,8 +203,11 @@ peer dependencies. The `.npmrc` file in each folder already works around it, so 
 
 ## Customising
 
-- **Your own character**: make a model in VRoid Studio (free) and export it as `.vrm`. Upload it somewhere that gives you a
-  direct download link, then change `DEFAULT_MODEL_URL` in `app/src/character/characterHtml.ts`.
+- **Your own character**: any Live2D Cubism 3, 4 or 5 model works. Commission one, buy one (for example on BOOTH or
+  nizima), or try the other official samples (Mao, Haru, Natori, Rice and others). Host the model's folder somewhere with
+  direct links, then point `DEFAULT_MODEL_URL` in `app/src/character/characterHtml.ts` at its `.model3.json`. Faces use
+  Live2D's standard parameter names, so they carry over to most models. The arm gestures use Hiyori's second arm set, so
+  they may need adjusting for another model.
 - **How emotions look**: edit `app/src/character/mapping.ts`.
 - **How gestures move**: edit `GESTURE_DEFS` in `app/src/character/characterHtml.ts`.
 - **Mika's personality**: edit `server/src/prompt.ts`.

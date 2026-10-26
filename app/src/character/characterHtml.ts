@@ -1,24 +1,21 @@
-import { EMOTION_EXPRESSIONS, GESTURES, IDLE_EXPRESSION } from "./mapping";
+import { EMOTION_FACES, GESTURES, IDLE_FACE } from "./mapping";
 
-// Free sample model from the three-vrm repo (MIT). Swap in your own VRoid
-// Studio export by hosting the .vrm somewhere and changing this URL.
-export const DEFAULT_MODEL_URL =
-  "https://cdn.jsdelivr.net/gh/pixiv/three-vrm@v3.5.5/packages/three-vrm/examples/models/VRM1_Constraint_Twist_Sample.vrm";
+// "Hiyori", an official Live2D sample model (Live2D Free Material License).
+// Swap in another Live2D Cubism 3/4/5 model by pointing this at its .model3.json.
+const SAMPLES = "https://cdn.jsdelivr.net/gh/Live2D/CubismWebSamples@b1de66b0b1f1cb881d95fb6158622aeb6a2827bd/Samples/Resources";
+export const DEFAULT_MODEL_URL = `${SAMPLES}/Hiyori/Hiyori.model3.json`;
 
-const THREE_VERSION = "0.186.1";
-const THREE_VRM_VERSION = "3.5.5";
+// Live2D's runtime has to be loaded from Live2D's own site (it isn't on npm).
+const CUBISM_CORE_URL = "https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js";
+const PIXI_VERSION = "6.5.10";
+const PIXI_LIVE2D_VERSION = "0.4.0";
 
 // The whole character renderer as one HTML page, loaded into a WebView.
 // The app drives it by calling window.companion.react({...}) and
-// window.companion.speak(ms) / mouth(level) via injectJavaScript; the page reports back with
-// window.ReactNativeWebView.postMessage(JSON).
+// window.companion.speak(ms) / mouth(level) via injectJavaScript; the page
+// reports back with window.ReactNativeWebView.postMessage(JSON).
 export function buildCharacterHtml(modelUrl: string = DEFAULT_MODEL_URL): string {
-  const config = JSON.stringify({
-    modelUrl,
-    expressions: EMOTION_EXPRESSIONS,
-    idleExpression: IDLE_EXPRESSION,
-    gestures: GESTURES,
-  });
+  const config = JSON.stringify({ modelUrl, faces: EMOTION_FACES, idleFace: IDLE_FACE, gestures: GESTURES });
   return `<!doctype html>
 <html>
 <head>
@@ -32,213 +29,186 @@ export function buildCharacterHtml(modelUrl: string = DEFAULT_MODEL_URL): string
   #debug { position: absolute; left: 8px; bottom: 8px; display: none; flex-wrap: wrap; gap: 4px; max-width: 95%; }
   #debug button { font-size: 12px; padding: 4px 8px; }
 </style>
-<script type="importmap">
-{ "imports": {
-  "three": "https://cdn.jsdelivr.net/npm/three@${THREE_VERSION}/build/three.module.min.js",
-  "three/addons/": "https://cdn.jsdelivr.net/npm/three@${THREE_VERSION}/examples/jsm/",
-  "@pixiv/three-vrm": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@${THREE_VRM_VERSION}/lib/three-vrm.module.min.js"
-} }
-</script>
+<script src="${CUBISM_CORE_URL}"></script>
+<script src="https://cdn.jsdelivr.net/npm/pixi.js@${PIXI_VERSION}/dist/browser/pixi.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display@${PIXI_LIVE2D_VERSION}/dist/cubism4.min.js"></script>
 </head>
 <body>
+<canvas id="stage"></canvas>
 <div id="status">Waking up…</div>
 <div id="debug"></div>
-<script type="module">
-import * as THREE from "three";
-import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { VRMLoaderPlugin, VRMUtils } from "@pixiv/three-vrm";
-
+<script>
+(function () {
 const CONFIG = ${config};
 const post = (msg) => { try { window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify(msg)); } catch (e) {} };
 const statusEl = document.getElementById("status");
 window.onerror = (m) => post({ type: "error", message: String(m) });
 
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.outputColorSpace = THREE.SRGBColorSpace;
-document.body.appendChild(renderer.domElement);
-
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 20);
-camera.position.set(0, 1.3, 1.9);
-camera.lookAt(0, 1.25, 0);
-const light = new THREE.DirectionalLight(0xffffff, Math.PI);
-light.position.set(1, 1.5, 2);
-scene.add(light, new THREE.AmbientLight(0xffffff, 0.6));
-
-function resize() {
-  const w = window.innerWidth, h = window.innerHeight;
-  renderer.setSize(w, h, false);
-  camera.aspect = w / h;
-  // Narrow screens: pull back a little so the upper body fits.
-  camera.position.z = w / h < 0.9 ? 2.7 : 2.1;
-  camera.updateProjectionMatrix();
-}
-window.addEventListener("resize", resize);
-resize();
-
-let vrm = null;
-const loader = new GLTFLoader();
-loader.register((parser) => new VRMLoaderPlugin(parser));
-loader.load(
-  CONFIG.modelUrl,
-  (gltf) => {
-    vrm = gltf.userData.vrm;
-    VRMUtils.removeUnnecessaryVertices(gltf.scene);
-    VRMUtils.combineSkeletons(gltf.scene);
-    VRMUtils.rotateVRM0(vrm); // VRM 0.x models face the other way
-    vrm.scene.traverse((o) => { o.frustumCulled = false; });
-    scene.add(vrm.scene);
-    if (vrm.lookAt) vrm.lookAt.target = camera;
-    statusEl.style.display = "none";
-    const meta = vrm.meta || {};
-    post({ type: "ready", model: meta.name || meta.title || "", license: meta.licenseUrl || meta.licenseName || "" });
-  },
-  (p) => { if (p.total) statusEl.textContent = "Waking up… " + Math.round((p.loaded / p.total) * 100) + "%"; },
-  (err) => { statusEl.textContent = "Couldn't load the character."; post({ type: "error", message: String(err && err.message || err) }); },
-);
-
-// ---------- face ----------
-const PRESETS = ["happy", "angry", "sad", "relaxed", "surprised"];
-let targetFace = Object.assign({}, CONFIG.idleExpression);
-const face = {};
-PRESETS.forEach((k) => { face[k] = 0; });
-let faceResetAt = 0;
-
-let nextBlink = 1.5, blinkT = -1;
-let speakUntil = 0;
-let mouth = 0, mouthLevel = 0, mouthAt = -1e9;
-
-// ---------- body ----------
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 const easeInOut = (x) => x < 0 ? 0 : x > 1 ? 1 : x * x * (3 - 2 * x);
 // envelope: ramps in over the first 20%, out over the last 25%
 const env = (t) => Math.min(easeInOut(t / 0.2), easeInOut((1 - t) / 0.25));
 const TAU = Math.PI * 2;
 
-// Each gesture returns bone rotation offsets [x, y, z] for progress t in 0..1.
+// ---------- state the app controls ----------
+let targetFace = Object.assign({}, CONFIG.idleFace);
+const face = {};
+const FACE_KEYS = ["MouthForm", "EyeSmile", "EyeOpen", "BrowY", "BrowForm", "Cheek", "MouthOpen", "EyeBallY"];
+const FACE_REST = { EyeOpen: 1 };
+const rest = (key) => (FACE_REST[key] != null ? FACE_REST[key] : 0);
+FACE_KEYS.forEach((key) => { face[key] = rest(key); });
+let faceResetAt = 0;
+let speakUntil = 0, mouth = 0, mouthLevel = 0, mouthAt = -1e9;
+
+// Gestures: values layered on top of the idle motion, for progress t in 0..1.
+// Hiyori's second arm set ("B", faded in with armsB) is the hands-in-front pose.
 const GESTURE_DEFS = {
-  nod: { dur: 1.2, pose: (t) => ({ head: [Math.sin(t * TAU * 2) * 0.22 * env(t), 0, 0], neck: [0.05 * env(t), 0, 0] }) },
-  tilt_head: { dur: 2.0, pose: (t) => ({ head: [0, 0, 0.28 * env(t)], neck: [0, 0, 0.08 * env(t)] }) },
+  nod: { dur: 1.2, pose: (t) => ({ AngleY: -Math.sin(t * TAU * 2) * 14 * env(t), BodyAngleY: -2 * env(t) }) },
+  tilt_head: { dur: 2.0, pose: (t) => ({ AngleZ: 16 * env(t), AngleX: 6 * env(t), BodyAngleZ: 2 * env(t) }) },
   wave: { dur: 2.4, pose: (t) => {
-    const e = env(t);
-    return {
-      rightUpperArm: [0, 0, -1.9 * e],
-      rightLowerArm: [0, Math.sin(t * TAU * 3) * 0.5 * e, -0.6 * e],
-      head: [0, 0, -0.08 * e],
-    };
+    const e = env(t), swing = Math.sin(t * TAU * 3);
+    return { armsB: e, ArmRB: 10, ArmLB: -10, HandRB: swing * 10, AngleZ: -8 * e + swing * 3 * e, BodyAngleZ: -3 * e };
   } },
   cheer: { dur: 1.8, pose: (t) => {
-    const e = env(t), bounce = Math.abs(Math.sin(t * TAU * 2)) * e;
-    return {
-      rightUpperArm: [0, 0, -2.0 * e],
-      leftUpperArm: [0, 0, 2.0 * e],
-      rightLowerArm: [0, 0, -0.3 * e],
-      leftLowerArm: [0, 0, 0.3 * e],
-      hips: [0, 0, 0], hipsY: 0.03 * bounce,
-      head: [-0.1 * e, 0, 0],
-    };
+    const e = env(t);
+    return { armsB: e, ArmRB: 10, ArmLB: 10, HandRB: -10, HandLB: -10, AngleY: 8 * e, hop: Math.abs(Math.sin(t * TAU * 2)) * e };
   } },
   think: { dur: 3.0, pose: (t) => {
     const e = env(t);
-    return {
-      rightUpperArm: [0, 0, 0.45 * e],
-      rightLowerArm: [0, 2.3 * e, 0],
-      rightHand: [0, 0, 0.3 * e],
-      head: [-0.12 * e, 0.15 * e, 0.12 * e],
-    };
+    return { armsB: e, ArmRB: -10, ArmLB: 0, HandRB: 10, AngleX: 10 * e, AngleZ: 8 * e, AngleY: 6 * e, EyeBallX: 0.5 * e };
   } },
 };
 let gesture = null; // { def, start }
+// The arm switch fades on its own, so a gesture cut short by the next one
+// never leaves both arm sets half-visible.
+let armsB = 0;
+const arms = { ArmRB: 0, ArmLB: 0, HandRB: 0, HandLB: 0 };
 
-// Arms come down from the T-pose to rest at the sides.
-const REST = { leftUpperArm: [0, 0, -1.2], rightUpperArm: [0, 0, 1.2], leftLowerArm: [0, 0, -0.1], rightLowerArm: [0, 0, 0.1] };
-const BONES = ["hips", "spine", "chest", "neck", "head", "leftUpperArm", "rightUpperArm", "leftLowerArm", "rightLowerArm", "rightHand"];
+// ---------- renderer ----------
+const app = new PIXI.Application({
+  view: document.getElementById("stage"),
+  resizeTo: window,
+  backgroundAlpha: 0,
+  antialias: true,
+  autoDensity: true,
+  resolution: Math.min(window.devicePixelRatio || 1, 2),
+});
 
-const clock = new THREE.Clock();
-function frame() {
-  requestAnimationFrame(frame);
-  const dt = Math.min(clock.getDelta(), 0.1);
-  const time = clock.elapsedTime;
-  if (vrm) {
-    const h = vrm.humanoid;
-    // pose = rest + idle + gesture
-    const pose = {};
-    BONES.forEach((b) => { pose[b] = (REST[b] || [0, 0, 0]).slice(); });
-    const breath = Math.sin(time * 1.6);
-    pose.spine[0] += breath * 0.015;
-    pose.chest[0] += breath * 0.02;
-    pose.leftUpperArm[2] -= breath * 0.015;
-    pose.rightUpperArm[2] += breath * 0.015;
-    pose.head[1] += Math.sin(time * 0.5) * 0.04;
-    pose.head[2] += Math.sin(time * 0.37) * 0.02;
-    let hipsY = 0;
-    if (gesture) {
-      const t = (time - gesture.start) / gesture.def.dur;
-      if (t >= 1) gesture = null;
-      else {
-        const off = gesture.def.pose(t);
-        for (const b in off) {
-          if (b === "hipsY") { hipsY = off[b]; continue; }
-          if (pose[b]) for (let i = 0; i < 3; i++) pose[b][i] += off[b][i];
-        }
-      }
-    }
-    BONES.forEach((b) => {
-      const node = h.getNormalizedBoneNode(b);
-      if (node) node.rotation.set(pose[b][0], pose[b][1], pose[b][2]);
-    });
-    const hips = h.getNormalizedBoneNode("hips");
-    if (hips) hips.position.y = (hips.userData.baseY ??= hips.position.y) + hipsY;
-
-    // face: ease toward the target emotion; after a while relax back to idle
-    if (faceResetAt && time > faceResetAt) { targetFace = Object.assign({}, CONFIG.idleExpression); faceResetAt = 0; }
-    const em = vrm.expressionManager;
-    if (em) {
-      const k = 1 - Math.exp(-dt * 6);
-      PRESETS.forEach((p) => {
-        face[p] += ((targetFace[p] || 0) - face[p]) * k;
-        em.setValue(p, face[p]);
-      });
-      // blink
-      if (blinkT < 0 && time > nextBlink) blinkT = 0;
-      let blink = 0;
-      if (blinkT >= 0) {
-        blinkT += dt;
-        blink = Math.sin(Math.min(blinkT / 0.16, 1) * Math.PI);
-        if (blinkT > 0.16) { blinkT = -1; nextBlink = time + 2 + Math.random() * 4; }
-      }
-      em.setValue("blink", blink * (1 - face.happy * 0.6));
-      // mouth: follow the live voice volume when the app sends it,
-      // otherwise fake a talking motion for the length of the reply
-      const nowMs = performance.now();
-      let mouthTarget = 0;
-      if (nowMs - mouthAt < 250) mouthTarget = mouthLevel;
-      else if (nowMs < speakUntil) mouthTarget = Math.max(0, Math.sin(time * 18) * 0.5 + Math.sin(time * 7) * 0.2);
-      mouth += (mouthTarget - mouth) * (1 - Math.exp(-dt * 25));
-      em.setValue("aa", mouth);
-    }
-    vrm.update(dt);
-  }
-  renderer.render(scene, camera);
+let model = null, baseHeight = 1, baseY = 0;
+function layout() {
+  if (!model) return;
+  const w = window.innerWidth, h = window.innerHeight;
+  // Frame head to waist: the model is a full-body picture, so scale it up
+  // and let the legs run off the bottom of the view.
+  const scale = Math.min((h * 1.75) / baseHeight, (w * 2.6) / baseHeight);
+  model.scale.set(scale);
+  model.x = w / 2;
+  baseY = h * 0.03;
+  model.y = baseY;
 }
-frame();
+window.addEventListener("resize", layout);
+
+PIXI.live2d.Live2DModel.from(CONFIG.modelUrl, { autoInteract: false })
+  .then((m) => {
+    model = m;
+    model.anchor.set(0.5, 0);
+    baseHeight = model.height;
+    app.stage.addChild(model);
+    layout();
+    statusEl.style.display = "none";
+    const core = model.internalModel.coreModel;
+    // Runs every frame after the idle motion, blinking and physics, so the
+    // emotion and gesture values win.
+    model.internalModel.on("beforeModelUpdate", () => applyPose(core));
+    post({ type: "ready", model: CONFIG.modelUrl.split("/").pop(), license: "Live2D Free Material License" });
+  })
+  .catch((err) => {
+    statusEl.textContent = "Couldn't load the character.";
+    post({ type: "error", message: String((err && err.message) || err) });
+  });
+
+let last = performance.now();
+function applyPose(core) {
+  const now = performance.now();
+  const dt = Math.min((now - last) / 1000, 0.1);
+  last = now;
+  const time = now / 1000;
+  const set = (id, v) => core.setParameterValueById(id, v);
+  const add = (id, v) => core.addParameterValueById(id, v);
+  const get = (id) => core.getParameterValueById(id);
+
+  // face: ease toward the target emotion; after a while relax back to idle
+  if (faceResetAt && time > faceResetAt) { targetFace = Object.assign({}, CONFIG.idleFace); faceResetAt = 0; }
+  const k = 1 - Math.exp(-dt * 6);
+  FACE_KEYS.forEach((key) => {
+    const target = targetFace[key] != null ? targetFace[key] : rest(key);
+    face[key] += (target - face[key]) * k;
+  });
+  set("ParamMouthForm", clamp(face.MouthForm, -1, 1));
+  set("ParamEyeLSmile", face.EyeSmile);
+  set("ParamEyeRSmile", face.EyeSmile);
+  // multiply so the model's own blinking keeps working
+  set("ParamEyeLOpen", clamp(get("ParamEyeLOpen") * face.EyeOpen, 0, 1.2));
+  set("ParamEyeROpen", clamp(get("ParamEyeROpen") * face.EyeOpen, 0, 1.2));
+  set("ParamBrowLY", face.BrowY);
+  set("ParamBrowRY", face.BrowY);
+  set("ParamBrowLForm", face.BrowForm);
+  set("ParamBrowRForm", face.BrowForm);
+  set("ParamCheek", face.Cheek);
+  add("ParamEyeBallY", face.EyeBallY);
+
+  // mouth: follow the live voice volume when the app sends it,
+  // otherwise fake a talking motion for the length of the reply
+  let mouthTarget = 0;
+  if (now - mouthAt < 250) mouthTarget = mouthLevel;
+  else if (now < speakUntil) mouthTarget = Math.max(0, Math.sin(time * 18) * 0.5 + Math.sin(time * 7) * 0.25);
+  mouth += (mouthTarget - mouth) * (1 - Math.exp(-dt * 25));
+  set("ParamMouthOpenY", clamp(Math.max(mouth, face.MouthOpen), 0, 1));
+
+  // gesture
+  let hop = 0, armsTarget = 0;
+  if (gesture) {
+    const t = (time - gesture.start) / gesture.def.dur;
+    if (t >= 1) gesture = null;
+    else {
+      const p = gesture.def.pose(t);
+      if (p.armsB != null) {
+        armsTarget = p.armsB;
+        Object.keys(arms).forEach((id) => { if (p[id] != null) arms[id] = p[id]; });
+      }
+      ["AngleX", "AngleY", "AngleZ", "BodyAngleY", "BodyAngleZ", "EyeBallX"].forEach((id) => { if (p[id]) add("Param" + id, p[id]); });
+      hop = p.hop || 0;
+    }
+  }
+  armsB += (armsTarget - armsB) * (1 - Math.exp(-dt * 12));
+  if (armsB > 0.002) {
+    core.setPartOpacityById("PartArmA", 1 - armsB);
+    core.setPartOpacityById("PartArmB", armsB);
+    Object.keys(arms).forEach((id) => set("Param" + id, arms[id]));
+  } else if (armsB > 0) {
+    armsB = 0;
+    core.setPartOpacityById("PartArmA", 1);
+    core.setPartOpacityById("PartArmB", 0);
+  }
+  if (model) model.y = baseY - hop * window.innerHeight * 0.03;
+}
 
 window.companion = {
   react({ emotion, gesture: g }) {
-    targetFace = Object.assign({}, CONFIG.expressions[emotion] || CONFIG.idleExpression);
-    faceResetAt = clock.elapsedTime + 12;
-    if (g && GESTURE_DEFS[g]) gesture = { def: GESTURE_DEFS[g], start: clock.elapsedTime };
+    targetFace = Object.assign({}, CONFIG.faces[emotion] || CONFIG.idleFace);
+    faceResetAt = performance.now() / 1000 + 12;
+    if (g && GESTURE_DEFS[g]) gesture = { def: GESTURE_DEFS[g], start: performance.now() / 1000 };
   },
   speak(ms) { speakUntil = performance.now() + Math.min(ms, 60000); },
   stopSpeaking() { speakUntil = 0; mouthAt = -1e9; },
-  mouth(level) { mouthLevel = Math.max(0, Math.min(1, level)); mouthAt = performance.now(); },
+  mouth(level) { mouthLevel = clamp(level, 0, 1); mouthAt = performance.now(); },
 };
 
 // Open this page with #debug in a desktop browser to try every emotion/gesture.
 if (location.hash === "#debug") {
   const dbg = document.getElementById("debug");
   dbg.style.display = "flex";
-  Object.keys(CONFIG.expressions).forEach((e) => {
+  Object.keys(CONFIG.faces).forEach((e) => {
     const b = document.createElement("button"); b.textContent = e;
     b.onclick = () => { window.companion.react({ emotion: e, gesture: "none" }); window.companion.speak(1500); };
     dbg.appendChild(b);
@@ -249,6 +219,7 @@ if (location.hash === "#debug") {
     dbg.appendChild(b);
   });
 }
+})();
 </script>
 </body>
 </html>`;

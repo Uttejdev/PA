@@ -14,8 +14,8 @@ export type CharacterHandle = {
 
 type Props = { onError?: (message: string) => void };
 
-// Renders the VRM character (three.js + three-vrm) inside a WebView, since
-// there's no maintained React Native VRM renderer. We talk to the page by
+// Renders the Live2D character (pixi-live2d-display) inside a WebView, since
+// Live2D has no React Native renderer. We talk to the page by
 // injecting small JS calls; it reports back with postMessage.
 export const CharacterView = forwardRef<CharacterHandle, Props>(function CharacterView({ onError }, ref) {
   const webview = useRef<WebView<object>>(null);

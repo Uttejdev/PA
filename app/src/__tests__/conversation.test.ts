@@ -1,7 +1,7 @@
 /// <reference types="jest" />
 import { MAX_TOOL_ROUNDS, runUserTurn, type ServerResponse, type TurnDeps } from "../chat/conversation";
 import { buildCharacterHtml } from "../character/characterHtml";
-import { EMOTION_EXPRESSIONS, EMOTIONS, GESTURES } from "../character/mapping";
+import { EMOTION_FACES, EMOTIONS, GESTURES } from "../character/mapping";
 import { parseIso, sentLine, toLocalIso } from "../lib/time";
 
 const profile = { name: "Uttej", goals: "", routines: "" };
@@ -115,14 +115,15 @@ describe("time helpers", () => {
 
 describe("character", () => {
   it("has an expression for every emotion", () => {
-    for (const e of EMOTIONS) expect(EMOTION_EXPRESSIONS[e]).toBeDefined();
+    for (const e of EMOTIONS) expect(EMOTION_FACES[e]).toBeDefined();
   });
 
   it("embeds the gesture list and pinned library versions", () => {
-    const html = buildCharacterHtml("https://example.com/m.vrm");
+    const html = buildCharacterHtml("https://example.com/m.model3.json");
     for (const g of GESTURES) expect(html).toContain(`"${g}"`);
-    expect(html).toContain("three@0.186.1");
-    expect(html).toContain("@pixiv/three-vrm@3.5.5");
-    expect(html).toContain("https://example.com/m.vrm");
+    expect(html).toContain("pixi.js@6.5.10");
+    expect(html).toContain("pixi-live2d-display@0.4.0");
+    expect(html).toContain("live2dcubismcore.min.js");
+    expect(html).toContain("https://example.com/m.model3.json");
   });
 });
