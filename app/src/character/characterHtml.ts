@@ -10,7 +10,7 @@ const THREE_VRM_VERSION = "3.5.5";
 
 // The whole character renderer as one HTML page, loaded into a WebView.
 // The app drives it by calling window.companion.react({...}) and
-// window.companion.speak(ms) via injectJavaScript; the page reports back with
+// window.companion.speak(ms) / mouth(level) via injectJavaScript; the page reports back with
 // window.ReactNativeWebView.postMessage(JSON).
 export function buildCharacterHtml(modelUrl: string = DEFAULT_MODEL_URL): string {
   const config = JSON.stringify({
@@ -107,6 +107,7 @@ let faceResetAt = 0;
 
 let nextBlink = 1.5, blinkT = -1;
 let speakUntil = 0;
+let mouth = 0, mouthLevel = 0, mouthAt = -1e9;
 
 // ---------- body ----------
 const easeInOut = (x) => x < 0 ? 0 : x > 1 ? 1 : x * x * (3 - 2 * x);
@@ -207,9 +208,14 @@ function frame() {
         if (blinkT > 0.16) { blinkT = -1; nextBlink = time + 2 + Math.random() * 4; }
       }
       em.setValue("blink", blink * (1 - face.happy * 0.6));
-      // talking mouth until real lip sync arrives (phase 2)
-      const talking = performance.now() < speakUntil;
-      em.setValue("aa", talking ? Math.max(0, Math.sin(time * 18) * 0.5 + Math.sin(time * 7) * 0.2) : 0);
+      // mouth: follow the live voice volume when the app sends it,
+      // otherwise fake a talking motion for the length of the reply
+      const nowMs = performance.now();
+      let mouthTarget = 0;
+      if (nowMs - mouthAt < 250) mouthTarget = mouthLevel;
+      else if (nowMs < speakUntil) mouthTarget = Math.max(0, Math.sin(time * 18) * 0.5 + Math.sin(time * 7) * 0.2);
+      mouth += (mouthTarget - mouth) * (1 - Math.exp(-dt * 25));
+      em.setValue("aa", mouth);
     }
     vrm.update(dt);
   }
@@ -223,7 +229,9 @@ window.companion = {
     faceResetAt = clock.elapsedTime + 12;
     if (g && GESTURE_DEFS[g]) gesture = { def: GESTURE_DEFS[g], start: clock.elapsedTime };
   },
-  speak(ms) { speakUntil = performance.now() + Math.min(ms, 15000); },
+  speak(ms) { speakUntil = performance.now() + Math.min(ms, 60000); },
+  stopSpeaking() { speakUntil = 0; mouthAt = -1e9; },
+  mouth(level) { mouthLevel = Math.max(0, Math.min(1, level)); mouthAt = performance.now(); },
 };
 
 // Open this page with #debug in a desktop browser to try every emotion/gesture.

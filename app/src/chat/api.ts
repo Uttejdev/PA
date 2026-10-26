@@ -1,21 +1,15 @@
 import { serverUrl } from "../lib/config";
-import type { Profile } from "../lib/profile";
-import type { ApiMessage, ServerResponse } from "./conversation";
+import type { ChatBody, ServerResponse } from "./conversation";
 
-const TIMEOUT_MS = 120_000;
+const CHAT_TIMEOUT_MS = 120_000;
+const TRANSCRIBE_TIMEOUT_MS = 30_000;
 
-export async function callServer(body: { messages: ApiMessage[]; profile: Profile }): Promise<ServerResponse> {
-  const url = `${serverUrl()}/chat`;
+async function request(path: string, init: RequestInit, timeoutMs: number): Promise<any> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   let res: Response;
   try {
-    res = await fetch(url, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
+    res = await fetch(`${serverUrl()}${path}`, { ...init, signal: controller.signal });
   } catch {
     throw new Error(`Can't reach the server at ${serverUrl()}. Is it running on your Mac, and is the phone on the same Wi-Fi?`);
   } finally {
@@ -23,5 +17,26 @@ export async function callServer(body: { messages: ApiMessage[]; profile: Profil
   }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data?.error ?? `Server error ${res.status}`);
-  return data as ServerResponse;
+  return data;
 }
+
+export function callServer(body: ChatBody): Promise<ServerResponse> {
+  return request(
+    "/chat",
+    { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) },
+    CHAT_TIMEOUT_MS,
+  );
+}
+
+/** Sends a recording (raw bytes) to the server's speech-to-text. */
+export async function transcribe(audio: ArrayBuffer, mimeType = "audio/mp4"): Promise<string> {
+  const data = await request(
+    "/transcribe",
+    { method: "POST", headers: { "content-type": mimeType }, body: audio },
+    TRANSCRIBE_TIMEOUT_MS,
+  );
+  return String(data.text ?? "").trim();
+}
+
+/** Full URL for a server-relative audio path like /audio/abc. */
+export const audioUrl = (path: string) => `${serverUrl()}${path}`;

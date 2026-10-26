@@ -158,6 +158,8 @@ export const ChatRequest = z.object({
     .min(1)
     .max(400),
   profile: Profile.default({ name: "", goals: "", routines: "" }),
+  // When true, final replies also come back with an audioUrl to play.
+  voice: z.boolean().default(false),
 });
 export type ChatRequest = z.infer<typeof ChatRequest>;
 

@@ -1,27 +1,33 @@
-# Mika Planner (phase 1 prototype)
+# Mika Planner (voice prototype)
 
-A life planner you talk to through an animated anime character. Mika is a supportive coach who can read and add to your
-iPhone calendar, set reminders, and keep notes, and she reacts to every reply with a facial expression and a gesture.
+A life planner you talk to, out loud, through an animated anime character. Mika is a supportive coach who can read and add
+to your iPhone calendar, set reminders, and keep notes. She answers in her own voice, with a facial expression and a
+gesture for every reply.
 
 ```
-app/      Expo (React Native) app: chat screen, 3D character, on-device tools, SQLite
-server/   Small Node server that holds your Anthropic API key and talks to Claude
+app/      Expo (React Native) app: voice screen, 3D character, on-device tools, SQLite
+server/   Small Node server that holds your API keys and talks to Claude and Boson (voice)
 ```
 
 ## How it works
 
-1. You type a message in the app. The app sends the conversation and your profile to the server on your Mac.
-2. The server asks Claude (`claude-opus-5-5`). Claude either replies, or asks to use a tool, such as "list calendar events".
+1. Tap the mic and talk. The app listens until you stop speaking, then sends the recording to the server on your Mac, which
+   turns it into text with Boson AI's speech-to-text (`higgs-stt-3.1`).
+2. The app sends that text, the conversation so far and your profile to the server, which asks Claude (`claude-opus-5-5`). Claude either replies, or asks to use a tool, such as "list calendar events".
 3. Tools run **on your phone**, because that's where your calendar, reminders and notes are. The app runs the tool and sends
    the result back through the server, and this repeats until Claude replies.
-4. Every final reply is structured JSON: `{ "text", "emotion", "gesture" }`. The app shows the text, sets the character's face
-   (for example `happy`, which maps to the VRM "happy" expression), and plays the gesture (`wave`, `nod`, `cheer`, and so on).
+4. Every final reply is structured JSON: `{ "text", "emotion", "gesture" }`. The server turns the text into Mika's voice with
+   Boson's text-to-speech (`higgs-tts-3`, voice `chloe`). The app plays it, moves her mouth with the voice's volume, sets her
+   face (for example `happy`, which maps to the VRM "happy" expression), and plays the gesture (`wave`, `nod`, `cheer`, and
+   so on).
+5. When she finishes talking, she listens again, hands-free, like a phone call. If nobody speaks for 20 seconds she stops
+   listening. Tap her while she's talking to cut her off, and tap the red button to end the conversation.
 
-Your API key stays in `server/.env` on your Mac. It is never put inside the app. Notes, reminders, your profile and the chat
-history are stored only on the phone, in SQLite.
+Your API keys stay in `server/.env` on your Mac. It is never put inside the app. Notes, reminders, your profile and the chat
+history are stored only on the phone, in SQLite. Recordings are sent to the server only to be transcribed, and aren't kept.
 
 The character is a free sample VRM model rendered with three.js and three-vrm inside a WebView. It breathes, blinks, sways
-a little, and moves its mouth while a reply appears.
+a little, and moves its mouth while she talks.
 
 ---
 
@@ -32,6 +38,10 @@ You need:
 - Your Mac and iPhone on the **same Wi-Fi network**.
 - The **Expo Go** app on your iPhone (free from the App Store).
 - An **Anthropic API key** from https://console.anthropic.com (Settings → API keys).
+- A **Boson AI API key** from https://boson.ai/workspace, for speech-to-text and Mika's voice. It's free during Boson's
+  preview, with rate limits.
+- A free **Expo account** (https://expo.dev/signup). Expo Go only opens projects when you're signed in on both the Mac and
+  the phone.
 - **Node.js 22**. You already have `nvm`, and this repo's `.nvmrc` tells it which version to use.
 
 Each command below goes in the **Terminal** app. Run one at a time: copy it, paste it, press Return, and wait for it to
@@ -69,7 +79,8 @@ Open it in TextEdit:
 open -e .env
 ```
 
-In TextEdit, paste your key right after `ANTHROPIC_API_KEY=` (no spaces, no quotes), then save (⌘S) and close it.
+In TextEdit, paste your Anthropic key right after `ANTHROPIC_API_KEY=` and your Boson key right after `BOSON_API_KEY=` (no
+spaces, no quotes), then save (⌘S) and close it.
 `.env` is listed in `.gitignore`, so git will never commit it.
 
 Start the server:
@@ -106,6 +117,14 @@ nvm use 22
 npm install
 ```
 
+Sign in to Expo (only needed once per Mac):
+
+```bash
+npx expo login
+```
+
+Also sign in to the **Expo Go** app on your iPhone, with the same account.
+
 ```bash
 npx expo start
 ```
@@ -118,14 +137,19 @@ The app finds the server automatically: it uses the same Mac address Expo Go is 
 ### 3. Try it
 
 1. When iOS asks to find devices on your **local network**, tap **Allow**. That's how the app reaches the server.
-2. Tap **Profile** (top right). Fill in your name, goals and routines, then tap Save. Mika sees this with every message.
-3. Try a few messages:
+2. Tap **Profile** (top right). Fill in your name, goals and routines, then tap Save. Mika knows this every time you talk.
+3. Tap the purple **mic** button and allow the **microphone**. When the ring pulses, she's listening. Just talk, then pause,
+   and she answers out loud and listens again. Try:
    - "What's on my calendar tomorrow?" (iOS asks for calendar access the first time)
-   - "Add a 30-minute run on Thursday at 7am"
-   - "Remind me to call mum in 10 minutes" (iOS asks for notification permission)
-   - "Save a note: book ideas: Dune, Project Hail Mary, tag it books"
+   - "Add a thirty-minute run on Thursday at seven a.m."
+   - "Remind me to stretch in two minutes" (iOS asks for notification permission)
+   - "Save a note called book ideas: Dune and Project Hail Mary, tag it books"
    - "What notes do I have about books?"
-4. **New chat** (top left) clears the conversation. Your notes, reminders and calendar stay.
+4. Tap Mika while she's talking to cut her off. Tap the red button to end the conversation.
+5. **Start over** (top left) makes her forget the conversation. Your notes, reminders and calendar stay.
+
+Each reply takes about 5–8 seconds after you stop talking: about half a second to understand you, 2–4 seconds for Claude
+(more if she uses tools), and about 2 seconds to generate her voice.
 
 ### Stopping and starting again later
 
@@ -150,6 +174,15 @@ Press Ctrl+C in both Terminal windows to stop. Next time, run only the `cd`, `nv
 **"The server has no Anthropic API key" / "key is missing or invalid"**: open `server/.env` again and check the key. Then
 stop the server with Ctrl+C and run `npm run dev` again.
 
+**Mika can't hear you, or stops listening right away**: allow the microphone in iPhone **Settings → Expo Go →
+Microphone**. Speak normally, close to the phone. She waits for about a second of quiet before she answers.
+
+**You can't hear Mika**: check that the volume is up. If the server window shows `[audio]` or `Text-to-speech failed`
+errors, check `BOSON_API_KEY` in `server/.env` and restart the server.
+
+**"You need to be signed in to Expo Go and Expo CLI"**: run `npx expo login` on the Mac, and log in to the Expo Go app with
+the same account.
+
 **The character says "Couldn't load the character"**: the 3D model (about 10 MB) and three.js load from the internet the
 first time, so the phone needs internet access.
 
@@ -168,6 +201,9 @@ peer dependencies. The `.npmrc` file in each folder already works around it, so 
 - **How emotions look**: edit `app/src/character/mapping.ts`.
 - **How gestures move**: edit `GESTURE_DEFS` in `app/src/character/characterHtml.ts`.
 - **Mika's personality**: edit `server/src/prompt.ts`.
+- **Mika's voice**: set `BOSON_VOICE` in `server/.env`, for example `chloe` (friendly), `nora` (calm) or `eleanor`
+  (professional), then restart the server. Boson also supports custom and cloned voices.
+- **How quickly she answers after you stop talking**: change `silenceEndMs` in `app/src/voice/vad.ts`.
 - **Tools Claude can use**: the schemas are in `server/src/schema.ts`, and the code that runs on the phone is in `app/src/tools/`.
 
 To tweak the character on your Mac without the phone, preview it in a browser (from the `app` folder):
@@ -223,12 +259,16 @@ npm run lint
 - The conversation history is only ever appended to. Thinking blocks go back to Claude exactly as received, which the API
   requires. Instead of trimming old messages, the app starts a fresh conversation after 200 messages. Long-term memory is
   phase 3.
-- The server streams from Claude internally, which avoids timeouts on long turns, and sends the finished reply to the
-  app. Showing text word-by-word on the phone can come with voice in phase 2.
+- The server streams from Claude internally, which avoids timeouts on long turns. It starts generating the voice as soon
+  as Claude's reply is ready, and the phone fetches it from `GET /audio/:id`.
+- The prompt tells Claude its words will be spoken: short sentences, times written the way people say them, and a quick
+  question back when speech recognition may have misheard.
 
 ## Roadmap
 
-- **Phase 2, voice**: speech-to-text, Claude, anime-style text-to-speech, lip sync, and voice notes.
+- **Phase 2, voice** (mostly done): hands-free conversation, Boson speech-to-text and voice, and volume-driven lip sync.
+  Still to do: voice notes, cutting Mika off just by talking (not only by tapping), and starting playback while the rest
+  of the reply is still being generated, to lower the wait.
 - **Phase 3, memory and proactivity**: update the profile after conversations, morning and evening check-ins, and web
   research.
 - **Phase 4, app stores**: hosted backend, sign-in, subscriptions, privacy policy, and App Store review.

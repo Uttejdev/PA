@@ -35,6 +35,12 @@
       [
         "expo-notifications",
         {}
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Mika listens when you talk to her, so she can help plan your day."
+        }
       ]
     ],
     "scheme": "mikaplanner"

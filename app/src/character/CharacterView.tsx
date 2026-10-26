@@ -7,6 +7,9 @@ import type { Emotion, Gesture } from "./mapping";
 export type CharacterHandle = {
   react: (emotion: Emotion, gesture: Gesture) => void;
   speak: (ms: number) => void;
+  stopSpeaking: () => void;
+  /** Live mouth openness 0..1 from the voice's volume (lip sync). */
+  mouth: (level: number) => void;
 };
 
 type Props = { onError?: (message: string) => void };
@@ -23,6 +26,8 @@ export const CharacterView = forwardRef<CharacterHandle, Props>(function Charact
   useImperativeHandle(ref, () => ({
     react: (emotion, gesture) => call(`window.companion.react(${JSON.stringify({ emotion, gesture })})`),
     speak: (ms) => call(`window.companion.speak(${Math.round(ms)})`),
+    stopSpeaking: () => call("window.companion.stopSpeaking()"),
+    mouth: (level) => call(`window.companion.mouth(${level.toFixed(2)})`),
   }));
 
   const onMessage = (e: WebViewMessageEvent) => {

@@ -12,17 +12,20 @@ export type ToolCall = { id: string; name: string; input: unknown };
 
 export type ServerResponse =
   | { kind: "tool_use"; assistant: ContentBlock[]; toolCalls: ToolCall[] }
-  | { kind: "reply"; assistant: ContentBlock[]; reply: CharacterReply }
-  | { kind: "refusal"; reply: CharacterReply };
+  | { kind: "reply"; assistant: ContentBlock[]; reply: CharacterReply; audioUrl?: string }
+  | { kind: "refusal"; reply: CharacterReply; audioUrl?: string };
+
+export type ChatBody = { messages: ApiMessage[]; profile: Profile; voice?: boolean };
 
 export type TurnDeps = {
-  callServer: (body: { messages: ApiMessage[]; profile: Profile }) => Promise<ServerResponse>;
+  callServer: (body: ChatBody) => Promise<ServerResponse>;
   runTool: (name: string, input: unknown) => Promise<{ ok: true; result: unknown } | { ok: false; error: string }>;
   onToolStart?: (name: string) => void;
   now?: () => Date;
 };
 
-export type TurnResult = { history: ApiMessage[]; reply: CharacterReply; toolsUsed: string[] };
+// audioUrl (server-relative) is set when the server spoke the reply.
+export type TurnResult = { history: ApiMessage[]; reply: CharacterReply; toolsUsed: string[]; audioUrl?: string };
 
 // Enough rounds for "check calendar, then add 3 events, then set a reminder".
 export const MAX_TOOL_ROUNDS = 8;
@@ -36,18 +39,19 @@ export async function runUserTurn(
   userText: string,
   profile: Profile,
   deps: TurnDeps,
+  opts: { voice?: boolean } = {},
 ): Promise<TurnResult> {
   const now = deps.now?.() ?? new Date();
   const working: ApiMessage[] = [...history, { role: "user", content: `${sentLine(now)}\n${userText}` }];
   const toolsUsed: string[] = [];
 
   for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
-    const res = await deps.callServer({ messages: working, profile });
+    const res = await deps.callServer({ messages: working, profile, voice: opts.voice });
 
-    if (res.kind === "refusal") return { history, reply: clean(res.reply), toolsUsed };
+    if (res.kind === "refusal") return { history, reply: clean(res.reply), toolsUsed, audioUrl: res.audioUrl };
 
     working.push({ role: "assistant", content: res.assistant });
-    if (res.kind === "reply") return { history: working, reply: clean(res.reply), toolsUsed };
+    if (res.kind === "reply") return { history: working, reply: clean(res.reply), toolsUsed, audioUrl: res.audioUrl };
 
     // All results go back in ONE user message, in the order Claude asked.
     const results: ContentBlock[] = [];

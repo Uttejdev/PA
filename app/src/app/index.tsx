@@ -1,95 +1,36 @@
 import { Link, Stack } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  type ScrollViewInstance,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Alert, Animated, Easing, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CharacterView, type CharacterHandle } from "../character/CharacterView";
-import { callServer } from "../chat/api";
-import { runUserTurn, type ApiMessage } from "../chat/conversation";
-import {
-  clearConversation,
-  loadConversation,
-  MAX_HISTORY_MESSAGES,
-  saveConversation,
-  type ChatLine,
-} from "../chat/store";
-import { loadProfile } from "../lib/profile";
-import { runTool, TOOL_LABELS } from "../tools";
+import { useVoiceConversation, type VoiceState } from "../voice/useVoiceConversation";
 
-let lineSeq = 0;
-const line = (from: ChatLine["from"], text: string): ChatLine => ({ id: `${Date.now()}-${lineSeq++}`, from, text });
+const LABELS: Record<VoiceState, string> = {
+  off: "Tap to talk to Mika",
+  listening: "Listening…",
+  hearing: "I'm listening…",
+  transcribing: "Got it…",
+  thinking: "Thinking…",
+  speaking: "Tap Mika to interrupt",
+};
 
-export default function ChatScreen() {
+// Voice-only: Mika fills the screen; one button starts and ends the conversation.
+export default function TalkScreen() {
   const character = useRef<CharacterHandle>(null);
-  const scroll = useRef<ScrollViewInstance>(null);
-  // Stack header = status bar inset + 44pt nav bar on iOS.
-  const headerHeight = useSafeAreaInsets().top + 44;
-  const [history, setHistory] = useState<ApiMessage[]>([]);
-  const [lines, setLines] = useState<ChatLine[]>([]);
-  const [status, setStatus] = useState<string | null>(null);
-  const [input, setInput] = useState("");
-  const busy = status !== null;
-
-  useEffect(() => {
-    loadConversation().then((c) => {
-      setHistory(c.history);
-      setLines(c.lines.length ? c.lines : [line("companion", "Hi! I'm Mika. Tell me about your day, or ask me to plan something.")]);
-    });
-  }, []);
-
-  async function send() {
-    const text = input.trim();
-    if (!text || busy) return;
-    setInput("");
-    const shown = [...lines, line("user", text)];
-    setLines(shown);
-    setStatus("Mika is thinking…");
-    character.current?.react("thinking", "none");
-
-    // Start fresh instead of trimming once the conversation gets very long.
-    const base = history.length > MAX_HISTORY_MESSAGES ? [] : history;
-    try {
-      const profile = await loadProfile();
-      const { history: next, reply } = await runUserTurn(base, text, profile, {
-        callServer,
-        runTool,
-        onToolStart: (name) => setStatus(`${TOOL_LABELS[name] ?? "Working"}…`),
-      });
-      const finalLines = [...shown, line("companion", reply.text)];
-      setHistory(next);
-      setLines(finalLines);
-      character.current?.react(reply.emotion, reply.gesture);
-      character.current?.speak(Math.min(reply.text.length * 55, 8000));
-      await saveConversation({ history: next, lines: finalLines });
-    } catch (err) {
-      setLines([...shown, line("status", err instanceof Error ? err.message : String(err))]);
-      character.current?.react("worried", "tilt_head");
-    } finally {
-      setStatus(null);
-    }
-  }
+  const insets = useSafeAreaInsets();
+  const voice = useVoiceConversation(character);
+  const on = voice.state !== "off";
+  const pulse = usePulse(voice.state === "listening" || voice.state === "hearing", voice.state === "hearing");
 
   function newChat() {
-    Alert.alert("Start a new chat?", "Mika will forget this conversation. Your notes, reminders and calendar stay.", [
+    Alert.alert("Start a new conversation?", "Mika will forget what you've talked about. Your notes, reminders and calendar stay.", [
       { text: "Cancel", style: "cancel" },
       {
-        text: "New chat",
+        text: "Start over",
         style: "destructive",
         onPress: async () => {
-          await clearConversation();
-          setHistory([]);
-          setLines([line("companion", "Fresh start! What's on your mind?")]);
+          await voice.stop();
+          await voice.resetHistory();
           character.current?.react("happy", "wave");
         },
       },
@@ -101,8 +42,8 @@ export default function ChatScreen() {
       <Stack.Screen
         options={{
           headerLeft: () => (
-            <Pressable onPress={newChat} hitSlop={10} disabled={busy}>
-              <Text style={styles.headerButton}>New chat</Text>
+            <Pressable onPress={newChat} hitSlop={10}>
+              <Text style={styles.headerButton}>Start over</Text>
             </Pressable>
           ),
           headerRight: () => (
@@ -114,86 +55,85 @@ export default function ChatScreen() {
           ),
         }}
       />
-      <KeyboardAvoidingView
-        style={styles.screen}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={headerHeight}
-      >
-        <View style={styles.characterArea}>
+      <View style={styles.screen}>
+        <View style={styles.character}>
           <CharacterView ref={character} />
+          {/* Tapping Mika while she talks skips to your turn. */}
+          <Pressable style={StyleSheet.absoluteFill} onPress={voice.interrupt} disabled={voice.state !== "speaking"} />
         </View>
-        <View style={styles.chatArea}>
-          <ScrollView
-            ref={scroll}
-            contentContainerStyle={styles.messages}
-            onContentSizeChange={() => scroll.current?.scrollToEnd({ animated: true })}
-            keyboardShouldPersistTaps="handled"
-          >
-            {lines.map((l) => (
-              <View key={l.id} style={[styles.bubble, bubbleStyle[l.from]]}>
-                <Text style={[styles.bubbleText, l.from === "user" && styles.userText]}>{l.text}</Text>
-              </View>
-            ))}
-            {status && (
-              <View style={styles.statusRow}>
-                <ActivityIndicator size="small" color="#7a6f9b" />
-                <Text style={styles.statusText}>{status}</Text>
-              </View>
-            )}
-          </ScrollView>
-          <View style={styles.inputRow}>
-            <TextInput
-              style={styles.input}
-              value={input}
-              onChangeText={setInput}
-              placeholder="Message Mika…"
-              placeholderTextColor="#9d94b8"
-              multiline
-              onSubmitEditing={send}
-              submitBehavior="submit"
-              returnKeyType="send"
-            />
-            <Pressable style={[styles.send, (busy || !input.trim()) && styles.sendDisabled]} onPress={send} disabled={busy}>
-              <Text style={styles.sendText}>Send</Text>
+
+        <View style={[styles.controls, { paddingBottom: insets.bottom + 24 }]}>
+          <Text style={styles.label}>{voice.detail ?? LABELS[voice.state]}</Text>
+          <View style={styles.buttonWrap}>
+            <Animated.View style={[styles.ring, { transform: [{ scale: pulse }], opacity: on ? 1 : 0 }]} />
+            <Pressable
+              onPress={on ? voice.stop : voice.start}
+              style={({ pressed }) => [styles.button, on && styles.buttonOn, pressed && styles.pressed]}
+              accessibilityRole="button"
+              accessibilityLabel={on ? "End conversation" : "Talk to Mika"}
+            >
+              <Text style={styles.buttonIcon}>{on ? "■" : "🎙"}</Text>
             </Pressable>
           </View>
+          <Text style={styles.hint}>{on ? "Tap to end" : " "}</Text>
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </>
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#faf8ff" },
-  characterArea: { flex: 1 },
-  chatArea: { flex: 1, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#d9d0f0" },
-  messages: { padding: 12, gap: 8 },
-  bubble: { maxWidth: "85%", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16 },
-  bubbleText: { fontSize: 16, lineHeight: 21, color: "#2c2640" },
-  userText: { color: "white" },
-  statusRow: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 4 },
-  statusText: { color: "#7a6f9b", fontSize: 14 },
-  inputRow: { flexDirection: "row", alignItems: "flex-end", padding: 8, gap: 8, backgroundColor: "white" },
-  input: {
-    flex: 1,
-    maxHeight: 110,
-    minHeight: 40,
-    paddingHorizontal: 12,
-    paddingTop: 10,
-    paddingBottom: 10,
-    borderRadius: 20,
-    backgroundColor: "#f2eefc",
-    fontSize: 16,
-    color: "#2c2640",
-  },
-  send: { height: 40, paddingHorizontal: 16, borderRadius: 20, backgroundColor: "#7c5cd6", justifyContent: "center" },
-  sendDisabled: { opacity: 0.4 },
-  sendText: { color: "white", fontWeight: "600", fontSize: 16 },
-  headerButton: { color: "#5b4b8a", fontSize: 16 },
-});
+// Breathing ring around the mic while Mika listens; bigger while you speak.
+function usePulse(active: boolean, strong: boolean) {
+  const [value] = useState(() => new Animated.Value(1));
+  useEffect(() => {
+    if (!active) {
+      value.stopAnimation();
+      value.setValue(1);
+      return;
+    }
+    const to = strong ? 1.35 : 1.15;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(value, { toValue: to, duration: 600, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(value, { toValue: 1, duration: 600, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [active, strong, value]);
+  return value;
+}
 
-const bubbleStyle = StyleSheet.create({
-  user: { alignSelf: "flex-end", backgroundColor: "#7c5cd6" },
-  companion: { alignSelf: "flex-start", backgroundColor: "#ece6fb" },
-  status: { alignSelf: "center", backgroundColor: "#fff1e6" },
+const BUTTON = 84;
+
+const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: "#efe9ff" },
+  character: { flex: 1 },
+  controls: { alignItems: "center", paddingTop: 12, gap: 14 },
+  label: { fontSize: 17, color: "#5b4b8a", textAlign: "center", paddingHorizontal: 24, minHeight: 22 },
+  buttonWrap: { width: BUTTON * 1.5, height: BUTTON * 1.5, alignItems: "center", justifyContent: "center" },
+  ring: {
+    position: "absolute",
+    width: BUTTON + 24,
+    height: BUTTON + 24,
+    borderRadius: (BUTTON + 24) / 2,
+    backgroundColor: "rgba(124, 92, 214, 0.22)",
+  },
+  button: {
+    width: BUTTON,
+    height: BUTTON,
+    borderRadius: BUTTON / 2,
+    backgroundColor: "#7c5cd6",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#5b4b8a",
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  buttonOn: { backgroundColor: "#e0566b" },
+  pressed: { transform: [{ scale: 0.95 }] },
+  buttonIcon: { fontSize: 34, color: "white" },
+  hint: { fontSize: 13, color: "#8a80a8" },
+  headerButton: { color: "#5b4b8a", fontSize: 16 },
 });
