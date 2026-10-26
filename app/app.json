@@ -1,0 +1,42 @@
+{
+  "expo": {
+    "name": "Mika Planner",
+    "slug": "mika-planner",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.example.mikaplanner"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "com.example.mikaplanner"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-sqlite",
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "Mika reads and adds events to your calendar when you ask her to plan your day."
+        }
+      ],
+      [
+        "expo-notifications",
+        {}
+      ]
+    ],
+    "scheme": "mikaplanner"
+  }
+}
