@@ -167,6 +167,22 @@ Press Ctrl+C in both Terminal windows to stop. Next time, run only the `cd`, `nv
 
 ---
 
+## Mika's actions (she can act things out)
+
+Besides her expressions and quick gestures, Mika has a library of held **actions**, sorted into categories (rest,
+affection, fun, reaction, greeting, focus, other). Ask her to "go to sleep", "close your eyes", "dance", "bow", "be shy"
+or "look away", and she does it, with effects like floating Zzz, hearts or music notes. She stays in a held action
+(like sleep) until something changes ("wake up!"); short ones (like a wink) end by themselves.
+
+**She learns new ones.** Ask for something that isn't in the library ("do a big stretch", "salute", "sulk"). Claude
+designs it from her face and body controls, saves it under a category on your phone, and performs it. Next time she
+uses the saved version straight away. Learned actions she hasn't used for 60 days are forgotten. Built-ins stay.
+
+- The built-in actions and the controls they can use are in `app/src/actions/library.ts`; learned ones are in the
+  phone's SQLite database (`character_actions` table).
+- To preview every action in a browser, run the character preview (see Customising); the `#debug` page has a ★ button
+  for each built-in action.
+
 ## Alarms
 
 iPhone apps can't set alarms in Apple's Clock app, so Mika has her own. Ask her ("wake me up at 6:30 tomorrow", "weekday

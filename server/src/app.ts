@@ -2,10 +2,10 @@ import Anthropic from "@anthropic-ai/sdk";
 import express from "express";
 import { TruncatedReplyError } from "./claude.js";
 import { ChatRequest, type ChatResponse } from "./schema.js";
-import { VoiceError, type BosonVoice, type ClipStore } from "./voice.js";
+import { VoiceError, type ClipStore, type Voice } from "./voice.js";
 
 export type TurnRunner = (req: ChatRequest) => Promise<ChatResponse>;
-export type VoiceDeps = { voice: BosonVoice; clips: ClipStore };
+export type VoiceDeps = { voice: Voice; clips: ClipStore };
 
 export function createApp(runTurn: TurnRunner, voiceDeps?: VoiceDeps) {
   const app = express();

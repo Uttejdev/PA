@@ -13,6 +13,7 @@ import * as Speech from "expo-speech";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { AppState } from "react-native";
+import { findAction, loadActions, markActionUsed, pruneActions } from "../actions/store";
 import type { CharacterHandle } from "../character/CharacterView";
 import { audioUrl, callServer, speak, transcribe } from "../chat/api";
 import { runUserTurn, type ApiMessage } from "../chat/conversation";
@@ -204,6 +205,19 @@ export function useVoiceConversation(character: RefObject<CharacterHandle | null
     if (mounted.current) await speakWithPhoneVoice(text, language);
   };
 
+  // Perform the held action Claude chose (or return to normal for "none").
+  const performAction = async (name: string) => {
+    if (!name || name === "none") return character.current?.pose(null);
+    const action = await findAction(name);
+    if (!action) {
+      log(`unknown action "${name}"`);
+      return character.current?.pose(null);
+    }
+    log(`action: ${action.name} (${action.category})`);
+    character.current?.pose(action);
+    markActionUsed(action.name).catch(() => {});
+  };
+
   const fail = (err: unknown) => {
     const message = err instanceof Error ? err.message : String(err);
     log(`error: ${message}`);
@@ -228,12 +242,16 @@ export function useVoiceConversation(character: RefObject<CharacterHandle | null
     character.current?.react("thinking", "think");
     // Start fresh instead of trimming once the conversation gets very long.
     const base = history.current.length > MAX_HISTORY_MESSAGES ? [] : history.current;
+    // Mika's action library, in a fixed order so Claude's prompt cache holds.
+    const library = (await loadActions())
+      .map(({ name, category, description }) => ({ name, category, description }))
+      .sort((a, b) => a.name.localeCompare(b.name));
     const turn = await runUserTurn(
       base,
       text,
       profile,
       { callServer, runTool, onToolStart: (name) => setDetail(`${TOOL_LABELS[name] ?? "Working"}…`) },
-      { voice: true },
+      { voice: true, actions: library },
     );
     history.current = turn.history;
     lines.current = [...lines.current, line("user", text), line("companion", turn.reply.text)].slice(-200);
@@ -242,6 +260,7 @@ export function useVoiceConversation(character: RefObject<CharacterHandle | null
     if (!active.current) return;
 
     character.current?.react(turn.reply.emotion, turn.reply.gesture);
+    await performAction(turn.reply.action);
     await speakOut(turn.reply.text, turn.audioUrl, profile.language);
     if (active.current) await listen();
   };
@@ -346,6 +365,9 @@ export function useVoiceConversation(character: RefObject<CharacterHandle | null
 
   // Start talking as soon as the screen opens.
   useEffect(() => {
+    pruneActions()
+      .then((n) => n && log(`forgot ${n} unused learned action(s)`))
+      .catch(() => {});
     loadConversation()
       .then((c) => {
         history.current = c.history;

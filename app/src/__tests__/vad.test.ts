@@ -87,7 +87,7 @@ describe("voice turns", () => {
       {
         callServer: async (b) => {
           bodies.push(b);
-          return { kind: "reply", assistant: [], reply: { text: "Hey!", emotion: "happy", gesture: "wave" }, audioUrl: "/audio/abc" };
+          return { kind: "reply", assistant: [], reply: { text: "Hey!", emotion: "happy", gesture: "wave", action: "none" }, audioUrl: "/audio/abc" };
         },
         runTool: async () => ({ ok: true, result: null }),
       },

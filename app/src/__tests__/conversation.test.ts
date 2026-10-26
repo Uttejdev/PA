@@ -26,10 +26,10 @@ function deps(responses: ServerResponse[], overrides: Partial<TurnDeps> = {}) {
 describe("runUserTurn", () => {
   it("returns a plain reply and appends both turns", async () => {
     const { d, bodies } = deps([
-      { kind: "reply", assistant: [{ type: "text", text: "{}" }], reply: { text: "Hi!", emotion: "happy", gesture: "wave" } },
+      { kind: "reply", assistant: [{ type: "text", text: "{}" }], reply: { text: "Hi!", emotion: "happy", gesture: "wave", action: "none" } },
     ]);
     const res = await runUserTurn([], "hello", profile, d);
-    expect(res.reply).toEqual({ text: "Hi!", emotion: "happy", gesture: "wave" });
+    expect(res.reply).toEqual({ text: "Hi!", emotion: "happy", gesture: "wave", action: "none" });
     expect(res.history).toHaveLength(2);
     expect(bodies[0].messages[0].content).toMatch(/^\[Sent Mon 26 Oct 2026 14:30, .+\]\nhello$/);
     expect(bodies[0].profile.name).toBe("Uttej");
@@ -47,7 +47,7 @@ describe("runUserTurn", () => {
             { id: "b", name: "reminder_list", input: {} },
           ],
         },
-        { kind: "reply", assistant: [{ type: "text", text: "{}" }], reply: { text: "Free all day", emotion: "calm", gesture: "nod" } },
+        { kind: "reply", assistant: [{ type: "text", text: "{}" }], reply: { text: "Free all day", emotion: "calm", gesture: "nod", action: "none" } },
       ],
       {
         runTool: async (name) => {
@@ -70,7 +70,7 @@ describe("runUserTurn", () => {
 
   it("keeps the old history on refusal", async () => {
     const old = [{ role: "user" as const, content: "earlier" }, { role: "assistant" as const, content: [] }];
-    const { d } = deps([{ kind: "refusal", reply: { text: "Sorry", emotion: "sad", gesture: "none" } }]);
+    const { d } = deps([{ kind: "refusal", reply: { text: "Sorry", emotion: "sad", gesture: "none", action: "none" } }]);
     const res = await runUserTurn(old, "something", profile, d);
     expect(res.history).toBe(old);
   });
@@ -85,9 +85,9 @@ describe("runUserTurn", () => {
   });
 
   it("normalizes unknown emotions/gestures", async () => {
-    const { d } = deps([{ kind: "reply", assistant: [], reply: { text: "hm", emotion: "angry" as any, gesture: "dance" as any } }]);
+    const { d } = deps([{ kind: "reply", assistant: [], reply: { text: "hm", emotion: "angry" as any, gesture: "dance" as any, action: "none" } }]);
     const res = await runUserTurn([], "x", profile, d);
-    expect(res.reply).toEqual({ text: "hm", emotion: "calm", gesture: "none" });
+    expect(res.reply).toEqual({ text: "hm", emotion: "calm", gesture: "none", action: "none" });
   });
 
   it("propagates server errors so the caller keeps its history", async () => {
