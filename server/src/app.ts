@@ -70,7 +70,8 @@ export function createApp(runTurn: TurnRunner, voiceDeps?: VoiceDeps) {
       return;
     }
     try {
-      const text = await voiceDeps.voice.transcribe(req.body, req.headers["content-type"] ?? "audio/mp4");
+      const language = typeof req.query.language === "string" ? req.query.language : undefined;
+      const text = await voiceDeps.voice.transcribe(req.body, req.headers["content-type"] ?? "audio/mp4", language);
       log("heard", text || "(nothing)");
       res.json({ text });
     } catch (err) {

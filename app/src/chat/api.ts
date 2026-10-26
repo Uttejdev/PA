@@ -29,9 +29,9 @@ export function callServer(body: ChatBody): Promise<ServerResponse> {
 }
 
 /** Sends a recording (raw bytes) to the server's speech-to-text. */
-export async function transcribe(audio: ArrayBuffer, mimeType = "audio/mp4"): Promise<string> {
+export async function transcribe(audio: ArrayBuffer, mimeType = "audio/mp4", language = "en"): Promise<string> {
   const data = await request(
-    "/transcribe",
+    `/transcribe?language=${encodeURIComponent(language)}`,
     { method: "POST", headers: { "content-type": mimeType }, body: audio },
     TRANSCRIBE_TIMEOUT_MS,
   );

@@ -9,10 +9,13 @@ export const TTS_MODEL = "higgs-tts-3";
 
 export class VoiceError extends Error {}
 
+const TTS_ATTEMPTS = 3;
+
 export type VoiceConfig = {
   apiKey: string | undefined;
   voice: string;
   fetch?: typeof fetch; // injectable for tests
+  retryDelayMs?: number; // tests use 0
 };
 
 export class BosonVoice {
@@ -27,9 +30,11 @@ export class BosonVoice {
     return this.cfg.fetch ?? fetch;
   }
 
-  async transcribe(audio: Buffer, mimeType: string): Promise<string> {
+  /** `language` is an ISO-639-1 code like "en"; without it the language is guessed (often wrongly for short clips). */
+  async transcribe(audio: Buffer, mimeType: string, language?: string): Promise<string> {
     const form = new FormData();
     form.append("model", STT_MODEL);
+    if (language && /^[a-z]{2}$/.test(language)) form.append("language", language);
     form.append("file", new Blob([new Uint8Array(audio)], { type: mimeType }), `speech.${extensionFor(mimeType)}`);
     const res = await this.fetch(`${BASE_URL}/audio/transcriptions`, {
       method: "POST",
@@ -42,13 +47,18 @@ export class BosonVoice {
   }
 
   async synthesize(text: string): Promise<Buffer> {
-    const res = await this.fetch(`${BASE_URL}/audio/speech`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${this.key()}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: TTS_MODEL, voice: this.cfg.voice, input: text, response_format: "mp3" }),
-    });
-    if (!res.ok) throw new VoiceError(`Text-to-speech failed (${res.status}): ${await res.text()}`);
-    return Buffer.from(await res.arrayBuffer());
+    // Boson's free preview is sometimes "busy" (429) for a moment, so retry.
+    for (let attempt = 1; ; attempt++) {
+      const res = await this.fetch(`${BASE_URL}/audio/speech`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${this.key()}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ model: TTS_MODEL, voice: this.cfg.voice, input: text, response_format: "mp3" }),
+      });
+      if (res.ok) return Buffer.from(await res.arrayBuffer());
+      const retryable = res.status === 429 || res.status >= 500;
+      if (!retryable || attempt >= TTS_ATTEMPTS) throw new VoiceError(`Text-to-speech failed (${res.status}): ${await res.text()}`);
+      await new Promise((r) => setTimeout(r, this.cfg.retryDelayMs ?? 700 * attempt));
+    }
   }
 }
 

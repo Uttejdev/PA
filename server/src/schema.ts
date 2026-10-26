@@ -179,6 +179,8 @@ export const Profile = z.object({
   name: z.string().max(100).default(""),
   goals: z.string().max(4000).default(""),
   routines: z.string().max(4000).default(""),
+  // ISO-639-1 code of the language the user speaks to Mika.
+  language: z.string().max(10).default("en"),
 });
 export type Profile = z.infer<typeof Profile>;
 
@@ -195,7 +197,7 @@ export const ChatRequest = z.object({
     )
     .min(1)
     .max(400),
-  profile: Profile.default({ name: "", goals: "", routines: "" }),
+  profile: Profile.default({ name: "", goals: "", routines: "", language: "en" }),
   // When true, final replies also come back with an audioUrl to play.
   voice: z.boolean().default(false),
 });

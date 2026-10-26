@@ -20,7 +20,7 @@ export const DEFAULT_VAD: VadOptions = {
   marginDb: 14,
   minThresholdDb: -50,
   maxThresholdDb: -22,
-  speechStartMs: 150,
+  speechStartMs: 250,
   silenceEndMs: 1100,
   noSpeechTimeoutMs: 20_000,
   maxUtteranceMs: 30_000,
@@ -42,6 +42,12 @@ export class Vad {
 
   get speaking() {
     return this.speechAt !== null;
+  }
+
+  /** How long the user talked, from speech start to the last loud moment. */
+  speechMs(now: number): number {
+    if (this.speechAt === null) return 0;
+    return Math.max(0, (this.belowSince ?? now) - this.speechAt);
   }
 
   /** Feed one metering sample; returns an event when something changes. */

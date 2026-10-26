@@ -33,13 +33,20 @@ export function systemBlocks(profile: Profile): Anthropic.Beta.Messages.BetaText
   return [{ type: "text", text: PERSONA }, { type: "text", text: profileBlock(profile) }];
 }
 
+const LANGUAGES: Record<string, string> = {
+  en: "English", hi: "Hindi", te: "Telugu", ta: "Tamil", kn: "Kannada", mr: "Marathi", es: "Spanish",
+  fr: "French", de: "German", ja: "Japanese", zh: "Chinese", ko: "Korean",
+};
+
 function profileBlock(p: Profile): string {
   const line = (label: string, value: string) => `${label}: ${value.trim() || "(not set yet)"}`;
+  const language = LANGUAGES[p.language] ?? "English";
   return [
     "About the user (from their profile in the app):",
     line("Name", p.name),
     line("Goals", p.goals),
     line("Routines", p.routines),
+    `Language: they talk to you in ${language}. Always reply in ${language}. If a message arrives in another language or as gibberish, that's almost certainly a speech-recognition mistake, so briefly ask them to say it again rather than switching languages.`,
     p.name.trim() ? "" : "They haven't filled in their profile; you can gently suggest it once.",
   ]
     .filter(Boolean)

@@ -1,7 +1,7 @@
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput } from "react-native";
-import { EMPTY_PROFILE, loadProfile, saveProfile, type Profile } from "../lib/profile";
+import { EMPTY_PROFILE, LANGUAGES, loadProfile, saveProfile, type Profile } from "../lib/profile";
 
 // Sent to Claude with every message so Mika's replies are personal.
 export default function ProfileScreen() {
@@ -48,6 +48,19 @@ export default function ProfileScreen() {
           editable={loaded}
         />
 
+        <Text style={styles.label}>Language you speak to Mika</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+          {LANGUAGES.map((l) => (
+            <Pressable
+              key={l.code}
+              onPress={() => set("language")(l.code)}
+              style={[styles.chip, profile.language === l.code && styles.chipOn]}
+            >
+              <Text style={[styles.chipText, profile.language === l.code && styles.chipTextOn]}>{l.name}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+
         <Text style={styles.hint}>Stored only on this phone, and sent to Claude with each message so Mika knows you.</Text>
 
         <Pressable style={styles.save} onPress={save} disabled={!loaded}>
@@ -64,6 +77,11 @@ const styles = StyleSheet.create({
   label: { marginTop: 12, fontSize: 15, fontWeight: "600", color: "#5b4b8a" },
   input: { backgroundColor: "white", borderRadius: 12, padding: 12, fontSize: 16, color: "#2c2640", borderWidth: 1, borderColor: "#e2dbf5" },
   multiline: { minHeight: 100, textAlignVertical: "top" },
+  chips: { gap: 8, paddingVertical: 4 },
+  chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 18, backgroundColor: "white", borderWidth: 1, borderColor: "#e2dbf5" },
+  chipOn: { backgroundColor: "#7c5cd6", borderColor: "#7c5cd6" },
+  chipText: { color: "#5b4b8a", fontSize: 15 },
+  chipTextOn: { color: "white" },
   hint: { marginTop: 12, color: "#7a6f9b", fontSize: 13 },
   save: { marginTop: 20, backgroundColor: "#7c5cd6", borderRadius: 14, paddingVertical: 14, alignItems: "center" },
   saveText: { color: "white", fontWeight: "600", fontSize: 17 },

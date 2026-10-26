@@ -14,7 +14,7 @@ function fakeBoson() {
     if (url.endsWith("/audio/speech")) return new Response(MP3, { headers: { "content-type": "audio/mpeg" } });
     return new Response("not found", { status: 404 });
   }) as typeof fetch;
-  return { voice: new BosonVoice({ apiKey: "bai-test", voice: "chloe", fetch: fetchImpl }), requests };
+  return { voice: new BosonVoice({ apiKey: "bai-test", voice: "chloe", fetch: fetchImpl, retryDelayMs: 0 }), requests };
 }
 
 async function withServer(fn: (url: string, boson: ReturnType<typeof fakeBoson>) => Promise<void>) {
@@ -37,11 +37,12 @@ const post = (url: string, body: unknown) =>
 describe("voice routes", () => {
   it("POST /transcribe sends the audio to Boson and returns trimmed text", () =>
     withServer(async (url, boson) => {
-      const res = await fetch(`${url}/transcribe`, { method: "POST", headers: { "content-type": "audio/mp4" }, body: Buffer.from("audio") });
+      const res = await fetch(`${url}/transcribe?language=en`, { method: "POST", headers: { "content-type": "audio/mp4" }, body: Buffer.from("audio") });
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ text: "Add a run tomorrow at ten." });
       const form = boson.requests[0].init.body as FormData;
       expect(form.get("model")).toBe(STT_MODEL);
+      expect(form.get("language")).toBe("en");
       expect((form.get("file") as File).name).toBe("speech.m4a");
       expect((boson.requests[0].init.headers as Record<string, string>).Authorization).toBe("Bearer bai-test");
     }));
@@ -90,6 +91,16 @@ describe("voice routes", () => {
     withServer(async (url) => {
       expect((await fetch(`${url}/audio/nope`)).status).toBe(404);
     }));
+
+  it("retries text-to-speech when Boson is busy", async () => {
+    let calls = 0;
+    const flaky = (async () => (++calls < 3 ? new Response("busy", { status: 429 }) : new Response(MP3))) as unknown as typeof fetch;
+    const voice = new BosonVoice({ apiKey: "k", voice: "chloe", fetch: flaky, retryDelayMs: 0 });
+    expect(await voice.synthesize("hi")).toEqual(MP3);
+    expect(calls).toBe(3);
+    const broken = (async () => new Response("bad", { status: 400 })) as unknown as typeof fetch;
+    await expect(new BosonVoice({ apiKey: "k", voice: "chloe", fetch: broken, retryDelayMs: 0 }).synthesize("hi")).rejects.toThrow(/400/);
+  });
 
   it("explains a missing Boson key", async () => {
     const voice = new BosonVoice({ apiKey: undefined, voice: "chloe" });

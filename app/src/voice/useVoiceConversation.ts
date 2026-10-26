@@ -9,6 +9,7 @@ import {
   type RecordingOptions,
 } from "expo-audio";
 import { File } from "expo-file-system";
+import * as Speech from "expo-speech";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { AppState } from "react-native";
@@ -19,6 +20,7 @@ import { loadConversation, MAX_HISTORY_MESSAGES, saveConversation, type ChatLine
 import { serverUrl } from "../lib/config";
 import { loadProfile } from "../lib/profile";
 import { runTool, TOOL_LABELS } from "../tools";
+import { isMeaningful } from "./filter";
 import { greeting } from "./greeting";
 import { Vad } from "./vad";
 
@@ -60,6 +62,7 @@ export function useVoiceConversation(character: RefObject<CharacterHandle | null
 
   const stateRef = useRef<VoiceState>("starting");
   const active = useRef(false);
+  const mounted = useRef(true);
   const greeted = useRef(false);
   const pausedByBackground = useRef(false);
   const history = useRef<ApiMessage[]>([]);
@@ -127,10 +130,18 @@ export function useVoiceConversation(character: RefObject<CharacterHandle | null
 
   const play = (path: string) =>
     new Promise<void>((resolve, reject) => {
+      if (!mounted.current) return resolve();
       setState("speaking");
       const started = Date.now();
       const watchdog = setInterval(() => {
-        if (!player.playing && !player.isLoaded && Date.now() - started > PLAYBACK_START_TIMEOUT_MS) {
+        let loaded = true;
+        try {
+          loaded = player.playing || player.isLoaded;
+        } catch {
+          // The player was released (screen closed or app reloaded): stop quietly.
+          return finish();
+        }
+        if (!loaded && Date.now() - started > PLAYBACK_START_TIMEOUT_MS) {
           finish(new Error("Couldn't play Mika's voice. Check the server window for errors."));
         } else if (Date.now() - started > PLAYBACK_MAX_MS) {
           finish();
@@ -145,15 +156,53 @@ export function useVoiceConversation(character: RefObject<CharacterHandle | null
         else resolve();
       };
       endPlayback.current = () => finish();
-      // Playback-only audio mode, so the voice comes out of the main speaker.
-      setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true })
+      // Wait until the server has the voice ready (and find out quickly if it
+      // failed), then switch to playback-only mode so it uses the main speaker.
+      fetch(audioUrl(path), { headers: { range: "bytes=0-0" } })
+        .then((res) => {
+          if (!res.ok) throw new Error(`voice unavailable (${res.status})`);
+          return setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
+        })
         .then(() => {
+          if (!mounted.current) return finish();
           log(`playing ${path}`);
           player.replace({ uri: audioUrl(path) });
           player.play();
         })
         .catch((e) => finish(e instanceof Error ? e : new Error(String(e))));
     });
+
+  // The iPhone's built-in voice, for when Mika's own voice can't be made.
+  const speakWithPhoneVoice = (text: string, language: string) =>
+    new Promise<void>((resolve) => {
+      log("using the phone's built-in voice");
+      setState("speaking");
+      character.current?.speak(text.length * 65);
+      const done = () => {
+        endPlayback.current = null;
+        character.current?.stopSpeaking();
+        resolve();
+      };
+      endPlayback.current = () => {
+        Speech.stop();
+        done();
+      };
+      setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true })
+        .catch(() => {})
+        .then(() => Speech.speak(text, { language, onDone: done, onStopped: done, onError: done }));
+    });
+
+  /** Plays Mika's voice for `text`; falls back to the phone's voice if that fails. */
+  const speakOut = async (text: string, path: string | undefined, language: string) => {
+    if (path) {
+      try {
+        return await play(path);
+      } catch (err) {
+        log(`voice failed, falling back: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+    if (mounted.current) await speakWithPhoneVoice(text, language);
+  };
 
   const fail = (err: unknown) => {
     const message = err instanceof Error ? err.message : String(err);
@@ -162,18 +211,21 @@ export function useVoiceConversation(character: RefObject<CharacterHandle | null
     pauseInternal("error", `${message} Tap Resume to try again.`);
   };
 
-  const handleUtterance = async (uri: string) => {
+  const handleUtterance = async (uri: string, speechMs: number) => {
     setState("transcribing");
+    const profile = await loadProfile();
     const audio = await new File(uri).arrayBuffer();
-    log(`sending ${(audio.byteLength / 1024).toFixed(0)} KB of audio`);
-    const text = await transcribe(audio, "audio/mp4");
+    log(`sending ${(audio.byteLength / 1024).toFixed(0)} KB of audio (${speechMs} ms of speech)`);
+    const text = await transcribe(audio, "audio/mp4", profile.language);
     log(`heard: ${text || "(nothing)"}`);
     if (!active.current) return;
-    if (!text) return listen(); // just noise
+    if (!isMeaningful(text, speechMs)) {
+      log("ignored (noise or filler)");
+      return listen();
+    }
 
     setState("thinking");
     character.current?.react("thinking", "think");
-    const profile = await loadProfile();
     // Start fresh instead of trimming once the conversation gets very long.
     const base = history.current.length > MAX_HISTORY_MESSAGES ? [] : history.current;
     const turn = await runUserTurn(
@@ -190,13 +242,12 @@ export function useVoiceConversation(character: RefObject<CharacterHandle | null
     if (!active.current) return;
 
     character.current?.react(turn.reply.emotion, turn.reply.gesture);
-    if (turn.audioUrl) await play(turn.audioUrl);
-    else setDetail(turn.reply.text); // no voice came back; show what she meant to say
+    await speakOut(turn.reply.text, turn.audioUrl, profile.language);
     if (active.current) await listen();
   };
 
   const listen = async (): Promise<void> => {
-    if (!active.current) return;
+    if (!active.current || !mounted.current) return;
     await stopRecording();
     await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
     await recorder.prepareToRecordAsync();
@@ -205,7 +256,13 @@ export function useVoiceConversation(character: RefObject<CharacterHandle | null
     const vad = new Vad();
     let ticks = 0;
     poll.current = setInterval(() => {
-      const status = recorder.getStatus();
+      let status;
+      try {
+        status = recorder.getStatus();
+      } catch {
+        clearPoll(); // recorder released (screen closed or app reloaded)
+        return;
+      }
       // Every few seconds, show what the mic hears (dB: -160 silent … 0 loud).
       if (ticks++ % 30 === 0) log(`mic: ${status.metering === undefined ? "no level" : status.metering.toFixed(0) + " dB"}`);
       const event = vad.push(status.metering, Date.now());
@@ -215,11 +272,12 @@ export function useVoiceConversation(character: RefObject<CharacterHandle | null
         listen().catch(fail);
       } else if (event === "speech_end") {
         clearPoll();
+        const speechMs = vad.speechMs(Date.now());
         recorder
           .stop()
           .then(() => {
             if (!recorder.uri) throw new Error("The recording didn't save.");
-            return handleUtterance(recorder.uri);
+            return handleUtterance(recorder.uri, speechMs);
           })
           .catch(fail);
       }
@@ -242,12 +300,10 @@ export function useVoiceConversation(character: RefObject<CharacterHandle | null
       greeted.current = true;
       const profile = await loadProfile();
       character.current?.react("happy", "wave");
-      try {
-        await play(await speak(greeting(profile.name)));
-      } catch (err) {
-        // A missing greeting shouldn't stop her from listening.
-        log(`greeting failed: ${err instanceof Error ? err.message : String(err)}`);
-      }
+      const text = greeting(profile.name);
+      // A missing greeting shouldn't stop her from listening.
+      const path = await speak(text).catch(() => undefined);
+      await speakOut(text, path, profile.language);
     }
     await listen();
   };
@@ -268,16 +324,15 @@ export function useVoiceConversation(character: RefObject<CharacterHandle | null
   const interrupt = useCallback(() => {
     if (stateRef.current !== "speaking") return;
     player.pause();
+    Speech.stop();
     endPlayback.current?.();
   }, [player]);
 
   /** Speak a line without listening afterwards (e.g. over a ringing alarm). */
   const say = useCallback(async (text: string) => {
-    try {
-      await play(await speak(text));
-    } catch (err) {
-      log(`say failed: ${err instanceof Error ? err.message : String(err)}`);
-    }
+    const profile = await loadProfile();
+    const path = await speak(text).catch(() => undefined);
+    await speakOut(text, path, profile.language);
     if (!active.current) setState("paused");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -297,9 +352,14 @@ export function useVoiceConversation(character: RefObject<CharacterHandle | null
         lines.current = c.lines;
       })
       .finally(() => begin().catch(fail));
+    mounted.current = true;
     return () => {
+      // Stop everything this screen started, so nothing touches the released
+      // recorder/player afterwards.
+      mounted.current = false;
       active.current = false;
       clearPoll();
+      endPlayback.current?.();
       deactivateKeepAwake(KEEP_AWAKE_TAG).catch(() => {});
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

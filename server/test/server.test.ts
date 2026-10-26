@@ -25,7 +25,7 @@ function fakeClient(message: Msg) {
 
 const req: ChatRequest = {
   messages: [{ role: "user", content: "[Sent Mon 26 Oct 2026 14:30, America/Los_Angeles, UTC-07:00]\nHi!" }],
-  profile: { name: "Uttej", goals: "Run a 10k", routines: "Gym Tue/Thu" },
+  profile: { name: "Uttej", goals: "Run a 10k", routines: "Gym Tue/Thu", language: "en" },
   voice: false,
 };
 

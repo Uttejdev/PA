@@ -200,6 +200,12 @@ stop the server with Ctrl+C and run `npm run dev` again.
 **Mika can't hear you, or stops listening right away**: allow the microphone in iPhone **Settings → Expo Go →
 Microphone**. Speak normally, close to the phone. She waits for about a second of quiet before she answers.
 
+**Mika mishears you, or answers in the wrong language**: set **Language you speak to Mika** in **Profile**. Speech
+recognition is told that language, and Mika always answers in it. Short noises, hums and "mm-hmm"s are ignored.
+
+**Mika's voice sounds different (more robotic) sometimes**: Boson's free preview is occasionally busy. The server retries
+3 times, and if it still can't make her voice, the phone's built-in voice reads the reply so she never goes silent.
+
 **You can't hear Mika**: check that the volume is up. If the server window shows `[audio]` or `Text-to-speech failed`
 errors, check `BOSON_API_KEY` in `server/.env` and restart the server.
 

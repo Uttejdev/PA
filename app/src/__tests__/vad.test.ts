@@ -1,5 +1,6 @@
 /// <reference types="jest" />
 import { runUserTurn } from "../chat/conversation";
+import { isMeaningful } from "../voice/filter";
 import { greeting } from "../voice/greeting";
 import { Vad, type VadEvent } from "../voice/vad";
 
@@ -82,7 +83,7 @@ describe("voice turns", () => {
     const res = await runUserTurn(
       [],
       "hi",
-      { name: "", goals: "", routines: "" },
+      { name: "", goals: "", routines: "", language: "en" },
       {
         callServer: async (b) => {
           bodies.push(b);
@@ -102,5 +103,15 @@ describe("greeting", () => {
     expect(greeting("Uttej Kotyada", new Date(2026, 9, 27, 8, 0), 0)).toBe("Good morning, Uttej! What's on your mind?");
     expect(greeting("", new Date(2026, 9, 27, 20, 0), 0.99)).toBe("Good evening! I'm listening whenever you're ready.");
     expect(greeting("Uttej", new Date(2026, 9, 27, 2, 0), 0)).toMatch(/^Hey, you're up late, Uttej!/);
+  });
+});
+
+describe("isMeaningful", () => {
+  it("keeps real answers, even short ones", () => {
+    for (const t of ["Wake me up at seven", "no", "yes", "ok", "Bye Mika!", "నమస్తే"]) expect(isMeaningful(t, 900)).toBe(true);
+  });
+  it("drops noise, fillers and very short sounds", () => {
+    for (const t of ["", "嗯哼哼哼哼哼。", "Hmm.", "mm-hmm", "uh um", "you", "..."]) expect(isMeaningful(t, 900)).toBe(false);
+    expect(isMeaningful("Wake me up at seven", 200)).toBe(false);
   });
 });

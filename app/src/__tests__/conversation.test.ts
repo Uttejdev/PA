@@ -4,7 +4,7 @@ import { buildCharacterHtml } from "../character/characterHtml";
 import { EMOTION_FACES, EMOTIONS, GESTURES } from "../character/mapping";
 import { parseIso, sentLine, toLocalIso } from "../lib/time";
 
-const profile = { name: "Uttej", goals: "", routines: "" };
+const profile = { name: "Uttej", goals: "", routines: "", language: "en" };
 const now = () => new Date(2026, 9, 26, 14, 30);
 
 function deps(responses: ServerResponse[], overrides: Partial<TurnDeps> = {}) {
