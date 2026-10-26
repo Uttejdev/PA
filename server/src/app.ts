@@ -11,6 +11,17 @@ export function createApp(runTurn: TurnRunner, voiceDeps?: VoiceDeps) {
   const app = express();
   app.use(express.json({ limit: "2mb" }));
 
+  // One line per request in the server window, e.g. "POST /chat 200 3.9s".
+  app.use((req, res, next) => {
+    const started = Date.now();
+    res.on("finish", () => {
+      if (req.path === "/health") return;
+      const path = req.path.startsWith("/audio/") ? "/audio" : req.path;
+      console.log(`${req.method} ${path} ${res.statusCode} ${((Date.now() - started) / 1000).toFixed(1)}s`);
+    });
+    next();
+  });
+
   app.get("/health", (_req, res) => {
     res.json({ ok: true });
   });
@@ -23,6 +34,8 @@ export function createApp(runTurn: TurnRunner, voiceDeps?: VoiceDeps) {
     }
     try {
       const result = await runTurn(parsed.data);
+      if (result.kind === "tool_use") log("tools", result.toolCalls.map((t) => t.name).join(", "));
+      else log(result.kind === "refusal" ? "declined" : "mika", `${result.reply.text} [${result.reply.emotion}, ${result.reply.gesture}]`);
       // Start speaking the final reply right away; the phone fetches it next.
       if (parsed.data.voice && voiceDeps && result.kind !== "tool_use") {
         const id = voiceDeps.clips.add(voiceDeps.voice.synthesize(result.reply.text));
@@ -47,6 +60,7 @@ export function createApp(runTurn: TurnRunner, voiceDeps?: VoiceDeps) {
     }
     try {
       const text = await voiceDeps.voice.transcribe(req.body, req.headers["content-type"] ?? "audio/mp4");
+      log("heard", text || "(nothing)");
       res.json({ text });
     } catch (err) {
       sendError(res, "transcribe", err);
@@ -88,6 +102,10 @@ export function createApp(runTurn: TurnRunner, voiceDeps?: VoiceDeps) {
 
   return app;
 }
+
+// Shown only in the server window on your Mac.
+const log = (label: string, text: string) =>
+  console.log(`  ${label}: ${text.length > 160 ? text.slice(0, 157) + "..." : text}`);
 
 function sendError(res: express.Response, route: string, err: unknown) {
   const { status, message } = describeError(err);
