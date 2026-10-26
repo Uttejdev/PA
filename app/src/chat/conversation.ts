@@ -7,7 +7,9 @@ import { sentLine } from "../lib/time";
 // and sends it back unchanged, which the API requires for thinking blocks.
 export type ContentBlock = { type: string; [key: string]: unknown };
 export type ApiMessage = { role: "user" | "assistant"; content: string | ContentBlock[] };
-export type CharacterReply = { text: string; emotion: Emotion; gesture: Gesture };
+// action: a held visual action from Mika's library, or "none".
+export type CharacterReply = { text: string; emotion: Emotion; gesture: Gesture; action: string };
+export type ActionSummary = { name: string; category: string; description: string };
 export type ToolCall = { id: string; name: string; input: unknown };
 
 export type ServerResponse =
@@ -15,7 +17,7 @@ export type ServerResponse =
   | { kind: "reply"; assistant: ContentBlock[]; reply: CharacterReply; audioUrl?: string }
   | { kind: "refusal"; reply: CharacterReply; audioUrl?: string };
 
-export type ChatBody = { messages: ApiMessage[]; profile: Profile; voice?: boolean };
+export type ChatBody = { messages: ApiMessage[]; profile: Profile; voice?: boolean; actions?: ActionSummary[] };
 
 export type TurnDeps = {
   callServer: (body: ChatBody) => Promise<ServerResponse>;
@@ -39,14 +41,14 @@ export async function runUserTurn(
   userText: string,
   profile: Profile,
   deps: TurnDeps,
-  opts: { voice?: boolean } = {},
+  opts: { voice?: boolean; actions?: ActionSummary[] } = {},
 ): Promise<TurnResult> {
   const now = deps.now?.() ?? new Date();
   const working: ApiMessage[] = [...history, { role: "user", content: `${sentLine(now)}\n${userText}` }];
   const toolsUsed: string[] = [];
 
   for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
-    const res = await deps.callServer({ messages: working, profile, voice: opts.voice });
+    const res = await deps.callServer({ messages: working, profile, voice: opts.voice, actions: opts.actions });
 
     if (res.kind === "refusal") return { history, reply: clean(res.reply), toolsUsed, audioUrl: res.audioUrl };
 
@@ -70,11 +72,12 @@ export async function runUserTurn(
 
   return {
     history,
-    reply: { text: "I got a bit tangled up doing all that. Could you ask me again, one step at a time?", emotion: "worried", gesture: "tilt_head" },
+    reply: { text: "I got a bit tangled up doing all that. Could you ask me again, one step at a time?", emotion: "worried", gesture: "tilt_head", action: "none" },
     toolsUsed,
   };
 }
 
 function clean(reply: CharacterReply): CharacterReply {
-  return { text: String(reply.text ?? ""), emotion: normalizeEmotion(reply.emotion), gesture: normalizeGesture(reply.gesture) };
+  const action = typeof reply.action === "string" && reply.action.trim() ? reply.action.trim() : "none";
+  return { text: String(reply.text ?? ""), emotion: normalizeEmotion(reply.emotion), gesture: normalizeGesture(reply.gesture), action };
 }

@@ -6,10 +6,19 @@ import { z } from "zod";
 export const EMOTIONS = ["happy", "worried", "thinking", "excited", "calm", "sad", "surprised"] as const;
 export const GESTURES = ["nod", "wave", "tilt_head", "cheer", "think", "none"] as const;
 
+// Visual-action controls and effects. Keep in sync with app/src/actions/library.ts.
+export const POSE_PARAMS = [
+  "AngleX", "AngleY", "AngleZ", "BodyAngleX", "BodyAngleY", "BodyAngleZ", "EyeLOpen", "EyeROpen", "EyeSmile",
+  "EyeBallX", "EyeBallY", "BrowY", "BrowForm", "MouthForm", "MouthOpen", "Cheek", "ArmsUp", "ArmR", "ArmL", "HandR", "HandL",
+] as const;
+export const EFFECTS = ["none", "zzz", "hearts", "sparkles", "sweat", "music", "question", "exclamation"] as const;
+export const ACTION_CATEGORIES = ["rest", "affection", "fun", "reaction", "greeting", "focus", "other"] as const;
+
 export const CharacterReply = z.object({
   text: z.string(),
   emotion: z.enum(EMOTIONS),
   gesture: z.enum(GESTURES),
+  action: z.string().default("none"),
 });
 export type CharacterReply = z.infer<typeof CharacterReply>;
 
@@ -23,8 +32,12 @@ export const replyFormat: Anthropic.Beta.Messages.BetaJSONOutputFormat = {
       text: { type: "string", description: "What the character says to the user. Plain text, no markdown." },
       emotion: { type: "string", enum: [...EMOTIONS] },
       gesture: { type: "string", enum: [...GESTURES] },
+      action: {
+        type: "string",
+        description: "Name of an action from your action library to perform now (held until you change it), or 'none' for your normal self.",
+      },
     },
-    required: ["text", "emotion", "gesture"],
+    required: ["text", "emotion", "gesture", "action"],
     additionalProperties: false,
   },
 };
@@ -39,6 +52,7 @@ export const TOOL_NAMES = [
   "alarm_set",
   "alarm_list",
   "alarm_cancel",
+  "character_action_learn",
 ] as const;
 export type ToolName = (typeof TOOL_NAMES)[number];
 
@@ -155,6 +169,53 @@ export const tools: Anthropic.Beta.Messages.BetaTool[] = [
     },
   },
   {
+    name: "character_action_learn",
+    description:
+      "Design a new visual action for yourself and save it to your action library, when the user asks you to do " +
+      "something physical that isn't in the library yet (e.g. stretch, yawn, sulk, salute). It's saved by category " +
+      "and you can reuse it by name from then on. Build it from your face/body controls: Angle* are head degrees " +
+      "(-30..30; AngleY negative = look down), BodyAngle* body degrees (-10..10), EyeLOpen/EyeROpen 0 closed..1 open, " +
+      "EyeSmile 0..1, EyeBallX/Y -1..1 (Y negative = look down), BrowY -1 low..1 raised, BrowForm -1 worried..1 cheerful, " +
+      "MouthForm -1 frown..1 smile, MouthOpen 0..1, Cheek 0..1 blush, ArmsUp 0..1 (1 = hands in front of chest, needed " +
+      "for ArmR/ArmL/HandR/HandL, each -10..10). Sway adds a repeating motion. After saving, perform it by putting its " +
+      "name in your reply's action field.",
+    strict: true,
+    input_schema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "snake_case, e.g. big_yawn" },
+        category: { type: "string", enum: [...ACTION_CATEGORIES] },
+        description: { type: "string", description: "One short sentence describing how it looks" },
+        pose: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: { param: { type: "string", enum: [...POSE_PARAMS] }, value: { type: "number" } },
+            required: ["param", "value"],
+            additionalProperties: false,
+          },
+        },
+        sway: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              param: { type: "string", enum: [...POSE_PARAMS] },
+              amplitude: { type: "number" },
+              period_seconds: { type: "number" },
+            },
+            required: ["param", "amplitude", "period_seconds"],
+            additionalProperties: false,
+          },
+        },
+        effect: { type: "string", enum: [...EFFECTS] },
+        duration_seconds: { type: "number", description: "How long to hold it; 0 = until you change it" },
+      },
+      required: ["name", "category", "description", "pose", "sway", "effect", "duration_seconds"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "alarm_list",
     description: "List the user's alarms with their ids, times, repeat pattern and next ring time.",
     strict: true,
@@ -200,6 +261,11 @@ export const ChatRequest = z.object({
   profile: Profile.default({ name: "", goals: "", routines: "", language: "en" }),
   // When true, final replies also come back with an audioUrl to play.
   voice: z.boolean().default(false),
+  // Mika's action library (built-in + learned), so she knows what she can do.
+  actions: z
+    .array(z.object({ name: z.string().max(60), category: z.string().max(40), description: z.string().max(300) }))
+    .max(300)
+    .default([]),
 });
 export type ChatRequest = z.infer<typeof ChatRequest>;
 

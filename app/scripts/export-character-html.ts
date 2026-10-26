@@ -3,8 +3,9 @@
 // (add #debug to the URL for emotion/gesture test buttons).
 // Usage (from the app folder): npx tsx scripts/export-character-html.ts [out.html]
 import { writeFileSync } from "node:fs";
+import { BUILTIN_ACTIONS } from "../src/actions/library";
 import { buildCharacterHtml } from "../src/character/characterHtml";
 
 const out = process.argv[2] ?? "character-preview.html";
-writeFileSync(out, buildCharacterHtml());
+writeFileSync(out, buildCharacterHtml(undefined, BUILTIN_ACTIONS));
 console.log(`Wrote ${out}`);

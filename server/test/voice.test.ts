@@ -20,7 +20,7 @@ function fakeBoson() {
 async function withServer(fn: (url: string, boson: ReturnType<typeof fakeBoson>) => Promise<void>) {
   const boson = fakeBoson();
   const app = createApp(
-    async () => ({ kind: "reply", assistant: [], reply: { text: "Done!", emotion: "happy", gesture: "nod" } }),
+    async () => ({ kind: "reply", assistant: [], reply: { text: "Done!", emotion: "happy", gesture: "nod", action: "none" } }),
     { voice: boson.voice, clips: new ClipStore() },
   );
   const server = app.listen(0);

@@ -28,7 +28,7 @@ export async function runTurn(client: Anthropic, req: ChatRequest, opts: TurnOpt
     output_config: { effort: opts.effort ?? "medium", format: replyFormat },
     // Caches tools + system + history prefix between turns.
     cache_control: { type: "ephemeral" },
-    system: systemBlocks(req.profile),
+    system: systemBlocks(req.profile, req.actions),
     tools,
     messages: req.messages as Anthropic.Beta.Messages.BetaMessageParam[],
   });
@@ -38,7 +38,7 @@ export async function runTurn(client: Anthropic, req: ChatRequest, opts: TurnOpt
     case "refusal":
       return {
         kind: "refusal",
-        reply: { text: "Sorry, I can't help with that one. Want to plan something else?", emotion: "sad", gesture: "none" },
+        reply: { text: "Sorry, I can't help with that one. Want to plan something else?", emotion: "sad", gesture: "none", action: "none" },
       };
     case "max_tokens":
     case "model_context_window_exceeded":
@@ -65,5 +65,5 @@ export function parseReply(content: Anthropic.Beta.Messages.BetaContentBlock[]):
   } catch {
     // fall through: structured output should prevent this, but never crash the chat
   }
-  return { text: text.trim() || "Hmm, I lost my train of thought. Could you say that again?", emotion: "calm", gesture: "none" };
+  return { text: text.trim() || "Hmm, I lost my train of thought. Could you say that again?", emotion: "calm", gesture: "none", action: "none" };
 }

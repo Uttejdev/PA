@@ -2,6 +2,7 @@ import { forwardRef, useImperativeHandle, useMemo, useRef } from "react";
 import { StyleSheet, View } from "react-native";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 import { buildCharacterHtml } from "./characterHtml";
+import type { CharacterAction } from "../actions/library";
 import type { Emotion, Gesture } from "./mapping";
 
 export type CharacterHandle = {
@@ -10,6 +11,8 @@ export type CharacterHandle = {
   stopSpeaking: () => void;
   /** Live mouth openness 0..1 from the voice's volume (lip sync). */
   mouth: (level: number) => void;
+  /** Hold a visual action (sleep, dance…), or null to return to normal. */
+  pose: (action: CharacterAction | null) => void;
 };
 
 type Props = { onError?: (message: string) => void };
@@ -28,6 +31,7 @@ export const CharacterView = forwardRef<CharacterHandle, Props>(function Charact
     speak: (ms) => call(`window.companion.speak(${Math.round(ms)})`),
     stopSpeaking: () => call("window.companion.stopSpeaking()"),
     mouth: (level) => call(`window.companion.mouth(${level.toFixed(2)})`),
+    pose: (action) => call(`window.companion.pose(${JSON.stringify(action)})`),
   }));
 
   const onMessage = (e: WebViewMessageEvent) => {

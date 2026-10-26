@@ -1,5 +1,5 @@
 import type Anthropic from "@anthropic-ai/sdk";
-import type { Profile } from "./schema.js";
+import type { ChatRequest, Profile } from "./schema.js";
 
 export const COMPANION_NAME = "Mika";
 
@@ -27,10 +27,26 @@ How you talk:
 Every final reply is JSON with:
 - text: what you say.
 - emotion: the feeling your face should show: happy, worried, thinking, excited, calm, sad or surprised. Match the moment (excited for a win, worried when they're overloaded, calm for routine confirmations).
-- gesture: one body movement: nod (agreeing, confirming), wave (hello/goodbye), tilt_head (curious, asking a question), cheer (celebrating), think (pondering a plan), or none.`;
+- gesture: one body movement: nod (agreeing, confirming), wave (hello/goodbye), tilt_head (curious, asking a question), cheer (celebrating), think (pondering a plan), or none.
+- action: a held visual action from your action library (listed below, by category), or "none" to be your normal self.
 
-export function systemBlocks(profile: Profile): Anthropic.Beta.Messages.BetaTextBlockParam[] {
-  return [{ type: "text", text: PERSONA }, { type: "text", text: profileBlock(profile) }];
+Your body: you're a 2D animated character, and you really can act things out. When the user asks you to do something physical (sleep, close your eyes, dance, bow, look away, blush…), do it: put that action's name in "action" and play along in your words. If it isn't in your library yet, design it with character_action_learn, then perform it. Don't say you can't do something your body can show. An action stays on until you change it, so set "none" when it no longer fits (for example when they wake you or ask you something new). Some actions end by themselves after their duration.`;
+
+export function systemBlocks(profile: Profile, actions: ChatRequest["actions"] = []): Anthropic.Beta.Messages.BetaTextBlockParam[] {
+  return [
+    { type: "text", text: PERSONA },
+    { type: "text", text: profileBlock(profile) },
+    { type: "text", text: actionsBlock(actions) },
+  ];
+}
+
+// Changes only when Mika learns something, so it stays cacheable.
+function actionsBlock(actions: ChatRequest["actions"]): string {
+  if (actions.length === 0) return "Your action library is empty; design actions with character_action_learn.";
+  const byCategory = new Map<string, string[]>();
+  for (const a of actions) byCategory.set(a.category, [...(byCategory.get(a.category) ?? []), `- ${a.name}: ${a.description}`]);
+  const groups = [...byCategory.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([c, items]) => `[${c}]\n${items.join("\n")}`);
+  return `Your action library, by category:\n${groups.join("\n")}`;
 }
 
 const LANGUAGES: Record<string, string> = {

@@ -1,3 +1,4 @@
+import { learnCharacterAction } from "./actions";
 import { cancelAlarm, listAlarms, setAlarm } from "./alarms";
 import { createEvent, listEvents } from "./calendar";
 import { createNote, searchNotes } from "./notes";
@@ -15,6 +16,7 @@ type Handlers = {
   alarm_set: (i: { time: string; label: string; repeat: string }) => Promise<unknown>;
   alarm_list: (i: Record<string, never>) => Promise<unknown>;
   alarm_cancel: (i: { id: number }) => Promise<unknown>;
+  character_action_learn: (i: Parameters<typeof learnCharacterAction>[0]) => Promise<unknown>;
 };
 
 const handlers: Handlers = {
@@ -27,6 +29,7 @@ const handlers: Handlers = {
   alarm_set: setAlarm,
   alarm_list: listAlarms,
   alarm_cancel: cancelAlarm,
+  character_action_learn: learnCharacterAction,
 };
 
 export type ToolOutcome = { ok: true; result: unknown } | { ok: false; error: string };
@@ -52,4 +55,5 @@ export const TOOL_LABELS: Record<string, string> = {
   alarm_set: "Setting an alarm",
   alarm_list: "Checking your alarms",
   alarm_cancel: "Cancelling an alarm",
+  character_action_learn: "Learning something new",
 };

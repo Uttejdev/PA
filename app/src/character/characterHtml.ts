@@ -1,3 +1,4 @@
+import type { CharacterAction } from "../actions/library";
 import { EMOTION_FACES, GESTURES, IDLE_FACE } from "./mapping";
 
 // "Hiyori", an official Live2D sample model (Live2D Free Material License).
@@ -14,8 +15,8 @@ const PIXI_LIVE2D_VERSION = "0.4.0";
 // The app drives it by calling window.companion.react({...}) and
 // window.companion.speak(ms) / mouth(level) via injectJavaScript; the page
 // reports back with window.ReactNativeWebView.postMessage(JSON).
-export function buildCharacterHtml(modelUrl: string = DEFAULT_MODEL_URL): string {
-  const config = JSON.stringify({ modelUrl, faces: EMOTION_FACES, idleFace: IDLE_FACE, gestures: GESTURES });
+export function buildCharacterHtml(modelUrl: string = DEFAULT_MODEL_URL, debugActions: CharacterAction[] = []): string {
+  const config = JSON.stringify({ modelUrl, faces: EMOTION_FACES, idleFace: IDLE_FACE, gestures: GESTURES, debugActions });
   return `<!doctype html>
 <html>
 <head>
@@ -28,6 +29,14 @@ export function buildCharacterHtml(modelUrl: string = DEFAULT_MODEL_URL): string
     font: 15px -apple-system, system-ui, sans-serif; color: #7a6f9b; }
   #debug { position: absolute; left: 8px; bottom: 8px; display: none; flex-wrap: wrap; gap: 4px; max-width: 95%; }
   #debug button { font-size: 12px; padding: 4px 8px; }
+  #fx { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; overflow: hidden; }
+  .fx { position: absolute; font: 700 28px -apple-system, system-ui, sans-serif; color: #7c5cd6;
+    animation: floatUp 2.4s ease-out forwards; text-shadow: 0 1px 2px rgba(255,255,255,0.8); }
+  @keyframes floatUp {
+    0% { transform: translate(0, 0) scale(0.6); opacity: 0; }
+    15% { opacity: 1; }
+    100% { transform: translate(var(--dx), -110px) scale(1.15); opacity: 0; }
+  }
 </style>
 <script src="${CUBISM_CORE_URL}"></script>
 <script src="https://cdn.jsdelivr.net/npm/pixi.js@${PIXI_VERSION}/dist/browser/pixi.min.js"></script>
@@ -35,6 +44,7 @@ export function buildCharacterHtml(modelUrl: string = DEFAULT_MODEL_URL): string
 </head>
 <body>
 <canvas id="stage"></canvas>
+<div id="fx"></div>
 <div id="status">Waking up…</div>
 <div id="debug"></div>
 <script>
@@ -79,6 +89,24 @@ const GESTURE_DEFS = {
   } },
 };
 let gesture = null; // { def, start }
+
+// Held visual actions from the action library (sleep, dance, shy…).
+let poseAction = null, poseTarget = 0, poseWeight = 0, poseStart = 0, poseEndAt = Infinity, nextFx = 0;
+const EFFECT_GLYPHS = { zzz: ["Z", "z", "Z"], hearts: ["♥", "💕"], sparkles: ["✨", "✦"], sweat: ["💧"], music: ["♪", "♫", "🎵"], question: ["?"], exclamation: ["!"] };
+const fxLayer = document.getElementById("fx");
+function spawnEffect(effect) {
+  const glyphs = EFFECT_GLYPHS[effect];
+  if (!glyphs) return;
+  const el = document.createElement("div");
+  el.className = "fx";
+  el.textContent = glyphs[Math.floor(Math.random() * glyphs.length)];
+  el.style.left = (58 + Math.random() * 14) + "%";
+  el.style.top = (14 + Math.random() * 8) + "%";
+  el.style.setProperty("--dx", (Math.random() * 40 - 10) + "px");
+  if (effect === "zzz") el.style.fontSize = (20 + Math.random() * 14) + "px";
+  fxLayer.appendChild(el);
+  setTimeout(() => el.remove(), 2500);
+}
 // The arm switch fades on its own, so a gesture cut short by the next one
 // never leaves both arm sets half-visible.
 let armsB = 0;
@@ -165,6 +193,34 @@ function applyPose(core) {
   mouth += (mouthTarget - mouth) * (1 - Math.exp(-dt * 25));
   set("ParamMouthOpenY", clamp(Math.max(mouth, face.MouthOpen), 0, 1));
 
+  // held action: blend its pose over the face, add sway, show its effect
+  poseWeight += (poseTarget - poseWeight) * (1 - Math.exp(-dt * 5));
+  if (poseTarget > 0 && now / 1000 > poseEndAt) { poseTarget = 0; post({ type: "pose_end", name: poseAction && poseAction.name }); }
+  let poseArms = null;
+  if (poseAction && poseWeight > 0.002) {
+    const w = poseWeight;
+    const lerp = (id, v) => set(id, get(id) * (1 - w) + v * w);
+    const ADD = { AngleX: 1, AngleY: 1, AngleZ: 1, BodyAngleX: 1, BodyAngleY: 1, BodyAngleZ: 1, EyeBallX: 1, EyeBallY: 1 };
+    const PAIRS = { EyeSmile: ["ParamEyeLSmile", "ParamEyeRSmile"], BrowY: ["ParamBrowLY", "ParamBrowRY"], BrowForm: ["ParamBrowLForm", "ParamBrowRForm"] };
+    const IDS = { MouthOpen: "ParamMouthOpenY" };
+    const arms = {};
+    const apply = (param, value, additive) => {
+      if (param === "ArmsUp" || param === "ArmR" || param === "ArmL" || param === "HandR" || param === "HandL") { arms[param] = value; return; }
+      if (ADD[param] || additive) { add("Param" + param, value * w); return; }
+      (PAIRS[param] || [IDS[param] || "Param" + param]).forEach((id) => lerp(id, value));
+    };
+    (poseAction.pose || []).forEach((p) => apply(p.param, p.value, false));
+    const t = now / 1000 - poseStart;
+    (poseAction.sway || []).forEach((sw) => apply(sw.param, Math.sin((t / sw.periodSeconds) * TAU) * sw.amplitude, true));
+    if (arms.ArmsUp != null) poseArms = { up: arms.ArmsUp * w, ArmRB: arms.ArmR, ArmLB: arms.ArmL, HandRB: arms.HandR, HandLB: arms.HandL };
+    // still talk while posing (e.g. sleepy mumbling)
+    set("ParamMouthOpenY", clamp(Math.max(get("ParamMouthOpenY"), mouth), 0, 1));
+    if (poseAction.effect && poseAction.effect !== "none" && w > 0.5 && now > nextFx) {
+      spawnEffect(poseAction.effect);
+      nextFx = now + (poseAction.effect === "zzz" ? 1100 : 700);
+    }
+  }
+
   // gesture
   let hop = 0, armsTarget = 0;
   if (gesture) {
@@ -179,6 +235,11 @@ function applyPose(core) {
       ["AngleX", "AngleY", "AngleZ", "BodyAngleY", "BodyAngleZ", "EyeBallX"].forEach((id) => { if (p[id]) add("Param" + id, p[id]); });
       hop = p.hop || 0;
     }
+  }
+  // a gesture's arms win over a held action's arms
+  if (!armsTarget && poseArms) {
+    armsTarget = poseArms.up;
+    ["ArmRB", "ArmLB", "HandRB", "HandLB"].forEach((id) => { if (poseArms[id] != null) arms[id] = poseArms[id]; });
   }
   armsB += (armsTarget - armsB) * (1 - Math.exp(-dt * 12));
   if (armsB > 0.002) {
@@ -202,6 +263,13 @@ window.companion = {
   speak(ms) { speakUntil = performance.now() + Math.min(ms, 60000); },
   stopSpeaking() { speakUntil = 0; mouthAt = -1e9; },
   mouth(level) { mouthLevel = clamp(level, 0, 1); mouthAt = performance.now(); },
+  pose(action) {
+    if (!action) { poseTarget = 0; return; }
+    poseAction = action;
+    poseTarget = 1;
+    poseStart = performance.now() / 1000;
+    poseEndAt = action.durationSeconds > 0 ? poseStart + action.durationSeconds : Infinity;
+  },
 };
 
 // Open this page with #debug in a desktop browser to try every emotion/gesture.
@@ -218,6 +286,14 @@ if (location.hash === "#debug") {
     b.onclick = () => window.companion.react({ emotion: "happy", gesture: g });
     dbg.appendChild(b);
   });
+  (CONFIG.debugActions || []).forEach((a) => {
+    const b = document.createElement("button"); b.textContent = "★ " + a.name;
+    b.onclick = () => window.companion.pose(a);
+    dbg.appendChild(b);
+  });
+  const off = document.createElement("button"); off.textContent = "★ none";
+  off.onclick = () => window.companion.pose(null);
+  dbg.appendChild(off);
 }
 })();
 </script>

@@ -27,6 +27,7 @@ const req: ChatRequest = {
   messages: [{ role: "user", content: "[Sent Mon 26 Oct 2026 14:30, America/Los_Angeles, UTC-07:00]\nHi!" }],
   profile: { name: "Uttej", goals: "Run a 10k", routines: "Gym Tue/Thu", language: "en" },
   voice: false,
+  actions: [{ name: "sleep", category: "rest", description: "Falls asleep." }],
 };
 
 describe("runTurn", () => {
@@ -45,6 +46,7 @@ describe("runTurn", () => {
     expect(p.tool_choice).toBeUndefined(); // forced tool_choice is a 400 on Opus 5.5
     expect(p.system[1].text).toContain("Uttej");
     expect(p.system[0].text).not.toContain("Uttej"); // persona block stays cacheable
+    expect(p.system[2].text).toBe("Your action library, by category:\n[rest]\n- sleep: Falls asleep.");
   });
 
   it("parses a final reply", async () => {
@@ -58,7 +60,7 @@ describe("runTurn", () => {
     const res = await runTurn(client, req);
     expect(res.kind).toBe("reply");
     if (res.kind !== "reply") return;
-    expect(res.reply).toEqual({ text: "Hey Uttej!", emotion: "excited", gesture: "cheer" });
+    expect(res.reply).toEqual({ text: "Hey Uttej!", emotion: "excited", gesture: "cheer", action: "none" });
     expect(res.assistant[0].type).toBe("thinking"); // returned untouched for the app to store
   });
 
@@ -94,6 +96,7 @@ describe("parseReply", () => {
       text: "plain words",
       emotion: "calm",
       gesture: "none",
+      action: "none",
     });
   });
 });
@@ -110,7 +113,7 @@ describe("tool schemas", () => {
 
 describe("HTTP", () => {
   async function withServer(fn: (url: string) => Promise<void>) {
-    const app = createApp(async () => ({ kind: "reply", assistant: [], reply: { text: "ok", emotion: "calm", gesture: "nod" } }));
+    const app = createApp(async () => ({ kind: "reply", assistant: [], reply: { text: "ok", emotion: "calm", gesture: "nod", action: "none" } }));
     const server = app.listen(0);
     try {
       await fn(`http://127.0.0.1:${(server.address() as AddressInfo).port}`);
