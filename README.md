@@ -7,7 +7,10 @@ gesture for every reply.
 ```
 app/      Expo (React Native) app: voice screen, 2D Live2D character, on-device tools, SQLite
 server/   Small Node server that holds your API keys and talks to Claude and Boson (voice)
+voice-server/  Optional free, open-source voice (Whisper + Kokoro/MMS) that runs on your Mac instead of Boson
 ```
+
+To use the free local voice instead of Boson, see [voice-server/README.md](voice-server/README.md).
 
 ## How it works
 

@@ -19,3 +19,7 @@ character-preview.html
 
 # macOS
 .DS_Store
+
+# Python (voice-server)
+.venv/
+__pycache__/

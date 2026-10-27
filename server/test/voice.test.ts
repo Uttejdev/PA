@@ -1,7 +1,17 @@
 import type { AddressInfo } from "node:net";
 import { describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
-import { BosonVoice, ClipStore, STT_MODEL, TTS_MODEL } from "../src/voice.js";
+import {
+  BosonVoice,
+  ClipStore,
+  LOCAL_STT_MODEL,
+  LOCAL_TTS_MODEL,
+  LOCAL_VOICE,
+  LocalVoice,
+  STT_MODEL,
+  TTS_MODEL,
+  voiceFromEnv,
+} from "../src/voice.js";
 
 const MP3 = Buffer.from("ID3-fake-mp3-bytes-0123456789");
 
@@ -105,5 +115,44 @@ describe("voice routes", () => {
   it("explains a missing Boson key", async () => {
     const voice = new BosonVoice({ apiKey: undefined, voice: "chloe" });
     await expect(voice.synthesize("hi")).rejects.toThrow(/BOSON_API_KEY/);
+  });
+});
+
+describe("local voice provider", () => {
+  function recording() {
+    const requests: { url: string; init: RequestInit }[] = [];
+    const fetchImpl = (async (url: string, init: RequestInit) => {
+      requests.push({ url, init });
+      return url.endsWith("/audio/transcriptions") ? Response.json({ text: " నమస్కారం " }) : new Response(MP3);
+    }) as typeof fetch;
+    return { requests, fetchImpl };
+  }
+
+  it("talks to the local server with no key", async () => {
+    const { requests, fetchImpl } = recording();
+    const voice = new LocalVoice({ fetch: fetchImpl });
+    expect(await voice.transcribe(Buffer.from("a"), "audio/mp4", "te")).toBe("నమస్కారం");
+    expect(await voice.synthesize("hi")).toEqual(MP3);
+    expect(requests[0].url).toBe("http://127.0.0.1:8000/v1/audio/transcriptions");
+    expect((requests[0].init.body as FormData).get("model")).toBe(LOCAL_STT_MODEL);
+    expect(requests[0].init.headers).toEqual({});
+    expect(JSON.parse(requests[1].init.body as string)).toMatchObject({ model: LOCAL_TTS_MODEL, voice: LOCAL_VOICE, input: "hi" });
+  });
+
+  it("explains when the local server isn't running", async () => {
+    const down = (async () => {
+      throw new TypeError("fetch failed");
+    }) as unknown as typeof fetch;
+    await expect(new LocalVoice({ fetch: down }).synthesize("hi")).rejects.toThrow(/voice-server\/start\.sh/);
+  });
+
+  it("VOICE_PROVIDER picks the provider", () => {
+    expect(voiceFromEnv({ BOSON_API_KEY: "k" })).toMatchObject({ label: "Boson", warning: undefined });
+    expect(voiceFromEnv({}).warning).toMatch(/BOSON_API_KEY/);
+    const local = voiceFromEnv({ VOICE_PROVIDER: "local", LOCAL_VOICE_URL: "http://mac:9000/v1/" });
+    expect(local.voice).toBeInstanceOf(LocalVoice);
+    expect(local.label).toBe("local (http://mac:9000/v1/)");
+    expect(local.warning).toBeUndefined();
+    expect(voiceFromEnv({ VOICE_PROVIDER: "nope", BOSON_API_KEY: "k" }).warning).toMatch(/isn't known/);
   });
 });
