@@ -45,3 +45,20 @@ it("lists actions grouped by category for Claude", () => {
   ]);
   expect(text).toBe("[fun]\n- dance: Dances.\n[rest]\n- sleep: Falls asleep.\n- close_eyes: Closes eyes.");
 });
+
+it("translates shorthand and older control names", () => {
+  const old = sanitizeAction({
+    name: "old_salute",
+    category: "greeting",
+    description: "from the previous character",
+    pose: [{ param: "ArmsUp", value: 1 }, { param: "ArmR", value: 10 }, { param: "EyeSmile", value: 0.5 }],
+    sway: [{ param: "BrowY", amplitude: 0.2, periodSeconds: 1 }],
+    effect: "none",
+    durationSeconds: 2,
+  } as unknown as CharacterAction);
+  expect(old.pose).toEqual([
+    { param: "ArmLUp", value: 1 }, { param: "ArmRUp", value: 1 }, { param: "ArmRShoulder", value: 1 },
+    { param: "EyeLSmile", value: 0.5 }, { param: "EyeRSmile", value: 0.5 },
+  ]);
+  expect(old.sway.map((s) => s.param)).toEqual(["BrowLY", "BrowRY"]);
+});

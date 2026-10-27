@@ -29,10 +29,14 @@ To use the free local voice instead of Boson, see [voice-server/README.md](voice
 Your API keys stay in `server/.env` on your Mac. It is never put inside the app. Notes, reminders, your profile and the chat
 history are stored only on the phone, in SQLite. Recordings are sent to the server only to be transcribed, and aren't kept.
 
-The character is **Hiyori**, a free official Live2D sample model, rendered in 2D with pixi-live2d-display inside a WebView.
+The character is **Mao**, a free official Live2D sample model (a young witch with a wand), rendered in 2D with
+pixi-live2d-display inside a WebView. She was picked for her rig: each arm has shoulder, elbow and wrist joints, so she can
+raise her arms and reach her head (salute, stretch, wave). Her eyes, eyelids and brows move separately on each side, and
+she has drawn magic performances. Her hands are preset drawings, so there are no individual finger movements, and they
+can't come in front of her face or chest.
 She breathes, blinks, sways through her idle animations, and moves her mouth while she talks.
 
-**Licences:** the Hiyori model is under the
+**Licences:** the Mao model is under the
 [Live2D Free Material License](https://www.live2d.com/eula/live2d-free-material-license-agreement_en.html). The Live2D Cubism
 Core runtime, which loads from Live2D's website, is under the
 [Live2D Proprietary Software License](https://www.live2d.com/eula/live2d-proprietary-software-license-agreement_en.html).
@@ -183,6 +187,8 @@ uses the saved version straight away. Learned actions she hasn't used for 60 day
 
 - The built-in actions and the controls they can use are in `app/src/actions/library.ts`; learned ones are in the
   phone's SQLite database (`character_actions` table).
+- Built-in actions include sleep, close_eyes, wink, salute, shy, bow, dance, shrug, pout, shake_head, shocked, confused,
+  and Mao's drawn magic: magic_heart, magic_trick and twirl.
 - To preview every action in a browser, run the character preview (see Customising); the `#debug` page has a ★ button
   for each built-in action.
 
@@ -244,11 +250,12 @@ peer dependencies. The `.npmrc` file in each folder already works around it, so 
 
 ## Customising
 
-- **Your own character**: any Live2D Cubism 3, 4 or 5 model works. Commission one, buy one (for example on BOOTH or
-  nizima), or try the other official samples (Mao, Haru, Natori, Rice and others). Host the model's folder somewhere with
-  direct links, then point `DEFAULT_MODEL_URL` in `app/src/character/characterHtml.ts` at its `.model3.json`. Faces use
-  Live2D's standard parameter names, so they carry over to most models. The arm gestures use Hiyori's second arm set, so
-  they may need adjusting for another model.
+- **Your own character**: any Live2D Cubism 3, 4 or 5 model works. Commission one (ask the artist for full arm joints and
+  several hand shapes), buy one (for example on BOOTH or nizima), or try the other official samples (Hiyori, Haru,
+  Natori, Rice and others). Host the model's folder somewhere with direct links, and point `DEFAULT_MODEL_URL` in
+  `app/src/character/characterHtml.ts` at its `.model3.json`. Then write a **rig** for it, like `MAO_RIG` in the same file.
+  The rig maps Mika's controls (head, eyes, eyelids, brows, mouth, shoulders, each arm's shoulder, elbow, wrist and hand)
+  onto that model's own parameter names. Actions and gestures use Mika's controls, so they carry over to the new model.
 - **How emotions look**: edit `app/src/character/mapping.ts`.
 - **How gestures move**: edit `GESTURE_DEFS` in `app/src/character/characterHtml.ts`.
 - **Mika's personality**: edit `server/src/prompt.ts`.

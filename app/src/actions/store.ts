@@ -31,8 +31,10 @@ export async function loadActions(): Promise<(CharacterAction & { uses: number }
   const db = await getDb();
   const rows = await db.getAllAsync<Row>("SELECT * FROM character_actions");
   const usage = new Map(rows.map((r) => [r.name, r.uses]));
+  const builtinNames = new Set(BUILTIN_ACTIONS.map((a) => a.name));
   const learned = rows.flatMap((r) => {
-    if (!r.data) return [];
+    // A built-in with the same name (e.g. a newer "salute") wins.
+    if (!r.data || builtinNames.has(r.name)) return [];
     try {
       return [{ ...sanitizeAction(JSON.parse(r.data)), uses: r.uses }];
     } catch {

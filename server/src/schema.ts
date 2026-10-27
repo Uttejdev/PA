@@ -8,11 +8,16 @@ export const GESTURES = ["nod", "wave", "tilt_head", "cheer", "think", "none"] a
 
 // Visual-action controls and effects. Keep in sync with app/src/actions/library.ts.
 export const POSE_PARAMS = [
-  "AngleX", "AngleY", "AngleZ", "BodyAngleX", "BodyAngleY", "BodyAngleZ", "EyeLOpen", "EyeROpen", "EyeSmile",
-  "EyeBallX", "EyeBallY", "BrowY", "BrowForm", "MouthForm", "MouthOpen", "Cheek", "ArmsUp", "ArmR", "ArmL", "HandR", "HandL",
+  "AngleX", "AngleY", "AngleZ", "BodyAngleX", "BodyAngleY", "BodyAngleZ", "BodyMoveX", "BodyMoveY", "BodyRotate",
+  "EyeLOpen", "EyeROpen", "EyeLSmile", "EyeRSmile", "EyeLForm", "EyeRForm", "EyeBallX", "EyeBallY", "PupilSmall", "EyeSparkle",
+  "BrowLY", "BrowRY", "BrowLAngle", "BrowRAngle", "BrowLForm", "BrowRForm",
+  "MouthForm", "MouthOpen", "MouthI", "MouthU", "MouthE", "MouthO", "MouthPout", "Cheek",
+  "ShoulderL", "ShoulderR", "ArmLUp", "ArmLShoulder", "ArmLElbow", "ArmLWrist", "HandL",
+  "ArmRUp", "ArmRShoulder", "ArmRElbow", "ArmRWrist", "HandR", "WandSpin",
 ] as const;
 export const EFFECTS = ["none", "zzz", "hearts", "sparkles", "sweat", "music", "question", "exclamation"] as const;
-export const ACTION_CATEGORIES = ["rest", "affection", "fun", "reaction", "greeting", "focus", "other"] as const;
+export const PERFORMANCES = ["none", "magic_heart", "magic_heart_big", "magic_trick", "twirl"] as const;
+export const ACTION_CATEGORIES = ["rest", "affection", "fun", "reaction", "greeting", "focus", "magic", "other"] as const;
 
 export const CharacterReply = z.object({
   text: z.string(),
@@ -172,13 +177,23 @@ export const tools: Anthropic.Beta.Messages.BetaTool[] = [
     name: "character_action_learn",
     description:
       "Design a new visual action for yourself and save it to your action library, when the user asks you to do " +
-      "something physical that isn't in the library yet (e.g. stretch, yawn, sulk, salute). It's saved by category " +
-      "and you can reuse it by name from then on. Build it from your face/body controls: Angle* are head degrees " +
-      "(-30..30; AngleY negative = look down), BodyAngle* body degrees (-10..10), EyeLOpen/EyeROpen 0 closed..1 open, " +
-      "EyeSmile 0..1, EyeBallX/Y -1..1 (Y negative = look down), BrowY -1 low..1 raised, BrowForm -1 worried..1 cheerful, " +
-      "MouthForm -1 frown..1 smile, MouthOpen 0..1, Cheek 0..1 blush, ArmsUp 0..1 (1 = hands in front of chest, needed " +
-      "for ArmR/ArmL/HandR/HandL, each -10..10). Sway adds a repeating motion. After saving, perform it by putting its " +
-      "name in your reply's action field.",
+      "something physical that isn't in the library yet (e.g. stretch, yawn, sulk, peek). It's saved by category " +
+      "and you can reuse it by name from then on. L/R mean your own left/right. Your controls:\n" +
+      "- Head: AngleX turn (-30..30, + = to your left), AngleY nod (+ up, - down), AngleZ tilt. Body: BodyAngleX/Y/Z " +
+      "(-10..10), BodyMoveX/BodyMoveY shift your whole body (-10..10; BodyMoveY + = hop up, - = crouch), BodyRotate lean.\n" +
+      "- Eyes, each side separately: EyeLOpen/EyeROpen eyelids 0 closed..1 open..1.2 wide; EyeLSmile/EyeRSmile 0..1 happy " +
+      "squint; EyeLForm/EyeRForm 0..1 sharper eyes; EyeBallX/EyeBallY -1..1 where you look (Y - = down); PupilSmall 0..1 " +
+      "(shock); EyeSparkle 0..1.\n" +
+      "- Brows, each side: BrowLY/BrowRY height -1..1; BrowLAngle/BrowRAngle -1..1; BrowLForm/BrowRForm -1 worried..1 cheerful.\n" +
+      "- Mouth: MouthForm -1 frown..1 smile; MouthOpen 0..1; vowel shapes MouthI/MouthU/MouthE/MouthO 0..1; MouthPout 0..1; " +
+      "Cheek 0..1 blush.\n" +
+      "- Shoulders: ShoulderL/ShoulderR -1..1 (+ = shrug up).\n" +
+      "- Arms (L and R the same way): ArmLUp 0 = relaxed at your side, 1 = raised. Raised, your hand is beside or above " +
+      "your head: ArmLShoulder -1 = arm out to the side, +1 = hand over your forehead (salute); ArmLElbow -1 = hand by " +
+      "your cheek, +1 = hand high above your head; ArmLWrist -1..1 turns the wrist; HandL -1..1 hand shape. Your right " +
+      "arm holds your wand (raised = wand up); WandSpin 0..1. Your hands can't go in front of your face or chest.\n" +
+      "- performance: an animated magic trick your artist drew (magic_heart, magic_heart_big, magic_trick, twirl), or none.\n" +
+      "Sway adds a repeating motion to any control. After saving, perform it by putting its name in your reply's action field.",
     strict: true,
     input_schema: {
       type: "object",
@@ -209,9 +224,10 @@ export const tools: Anthropic.Beta.Messages.BetaTool[] = [
           },
         },
         effect: { type: "string", enum: [...EFFECTS] },
+        performance: { type: "string", enum: [...PERFORMANCES] },
         duration_seconds: { type: "number", description: "How long to hold it; 0 = until you change it" },
       },
-      required: ["name", "category", "description", "pose", "sway", "effect", "duration_seconds"],
+      required: ["name", "category", "description", "pose", "sway", "effect", "performance", "duration_seconds"],
       additionalProperties: false,
     },
   },

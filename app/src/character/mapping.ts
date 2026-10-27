@@ -4,8 +4,8 @@ export const GESTURES = ["nod", "wave", "tilt_head", "cheer", "think", "none"] a
 export type Emotion = (typeof EMOTIONS)[number];
 export type Gesture = (typeof GESTURES)[number];
 
-// Face poses as Live2D parameter values. These are Cubism's standard
-// parameter IDs, so they work on most Live2D models, not just the sample.
+// Face poses in Mika's controls (see actions/library.ts for their ranges);
+// the character page maps them onto the model's own parameters.
 //   MouthForm: -1 frown … 1 smile      EyeSmile: 0 … 1 (happy squint)
 //   EyeOpen:   multiplier on the eyes (1 = normal, blinking still works)
 //   BrowY:     -1 down … 1 raised      BrowForm: -1 worried … 1 cheerful
@@ -14,22 +14,26 @@ export type FacePose = Partial<{
   MouthForm: number;
   EyeSmile: number;
   EyeOpen: number;
+  EyeForm: number;
   BrowY: number;
   BrowForm: number;
   Cheek: number;
   MouthOpen: number;
+  MouthPout: number;
   EyeBallY: number;
+  EyeSparkle: number;
+  PupilSmall: number;
 }>;
 
 // How each Claude emotion shows on the character's face.
 export const EMOTION_FACES: Record<Emotion, FacePose> = {
   happy: { MouthForm: 1, EyeSmile: 0.6, Cheek: 0.4, BrowY: 0.3, BrowForm: 0.5 },
-  excited: { MouthForm: 1, EyeSmile: 0.3, EyeOpen: 1.15, Cheek: 0.8, BrowY: 0.7, BrowForm: 0.6, MouthOpen: 0.3 },
+  excited: { MouthForm: 1, EyeSmile: 0.2, EyeOpen: 1.15, Cheek: 0.8, BrowY: 0.7, BrowForm: 0.6, MouthOpen: 0.35, EyeSparkle: 1 },
   calm: { MouthForm: 0.5, EyeSmile: 0.3, EyeOpen: 0.9 },
-  thinking: { MouthForm: -0.2, BrowForm: -0.3, BrowY: 0.2, EyeBallY: 0.6 },
+  thinking: { MouthForm: -0.1, BrowForm: -0.3, BrowY: 0.2, EyeBallY: 0.6, EyeForm: 0.3 },
   worried: { MouthForm: -0.6, BrowForm: -0.9, BrowY: -0.2, EyeOpen: 0.95 },
   sad: { MouthForm: -1, BrowForm: -1, BrowY: -0.6, EyeOpen: 0.7 },
-  surprised: { MouthForm: 0, EyeOpen: 1.2, BrowY: 1, MouthOpen: 0.55 },
+  surprised: { MouthForm: 0, EyeOpen: 1.2, BrowY: 1, MouthOpen: 0.55, PupilSmall: 0.5 },
 };
 
 // Resting face between replies.
