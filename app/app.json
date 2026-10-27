@@ -11,7 +11,8 @@
       "bundleIdentifier": "dev.mikaplanner.companion",
       "infoPlist": {
         "NSAlarmKitUsageDescription": "Mika sets real alarms for you, so they ring even when the app is closed or your phone is on silent."
-      }
+      },
+      "appleTeamId": "TH83HV8VFA"
     },
     "android": {
       "adaptiveIcon": {
@@ -27,6 +28,7 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      "./plugins/withoutPushEntitlement",
       "expo-router",
       "expo-sqlite",
       [
@@ -45,7 +47,15 @@
           "microphonePermission": "Mika listens when you talk to her, so she can help plan your day."
         }
       ],
-      "expo-asset"
+      "expo-asset",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "18.0"
+          }
+        }
+      ]
     ],
     "scheme": "mikaplanner"
   }

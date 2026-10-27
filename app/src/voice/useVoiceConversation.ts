@@ -63,6 +63,7 @@ export function useVoiceConversation(character: RefObject<CharacterHandle | null
 
   const stateRef = useRef<VoiceState>("starting");
   const active = useRef(false);
+  const listenTurn = useRef(0);
   const mounted = useRef(true);
   const greeted = useRef(false);
   const pausedByBackground = useRef(false);
@@ -119,6 +120,8 @@ export function useVoiceConversation(character: RefObject<CharacterHandle | null
   const pauseInternal = async (reason: string, message: string | null) => {
     log(`pause (${reason})`);
     active.current = false;
+    if (micRetry.current) clearTimeout(micRetry.current);
+    micRetry.current = null;
     await stopRecording().catch(() => {});
     player.pause();
     endPlayback.current?.();
@@ -218,9 +221,26 @@ export function useVoiceConversation(character: RefObject<CharacterHandle | null
     markActionUsed(action.name).catch(() => {});
   };
 
+  // iOS refuses the microphone while another app holds it (a phone,
+  // FaceTime or WhatsApp call, a voice memo…). Wait and try again instead
+  // of giving up.
+  const micRetry = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isMicBusy = (message: string) =>
+    /561017449|insufficient priority|Session activation failed|configure audio session/i.test(message);
+
   const fail = (err: unknown) => {
     const message = err instanceof Error ? err.message : String(err);
     log(`error: ${message}`);
+    if (isMicBusy(message) && active.current && mounted.current && AppState.currentState === "active") {
+      setState("paused");
+      setDetail("Another app is using the microphone (a call?). I'll listen again as soon as it's free.");
+      if (micRetry.current) clearTimeout(micRetry.current);
+      micRetry.current = setTimeout(() => {
+        micRetry.current = null;
+        if (active.current && mounted.current) listen().catch(fail);
+      }, 3000);
+      return;
+    }
     character.current?.react("worried", "tilt_head");
     pauseInternal("error", `${message} Tap Resume to try again.`);
   };
@@ -267,14 +287,21 @@ export function useVoiceConversation(character: RefObject<CharacterHandle | null
 
   const listen = async (): Promise<void> => {
     if (!active.current || !mounted.current) return;
+    // Only the newest listen() may use the microphone; an older one (from a
+    // retry or a reload) that's still waiting bows out.
+    const myTurn = ++listenTurn.current;
     await stopRecording();
+    if (myTurn !== listenTurn.current) return;
     await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
     await recorder.prepareToRecordAsync();
+    if (myTurn !== listenTurn.current) return;
     recorder.record();
+    setDetail(null);
     setState("listening");
     const vad = new Vad();
     let ticks = 0;
-    poll.current = setInterval(() => {
+    const timer = setInterval(() => {
+      if (myTurn !== listenTurn.current) return clearInterval(timer); // only stop our own timer
       let status;
       try {
         status = recorder.getStatus();
@@ -301,15 +328,25 @@ export function useVoiceConversation(character: RefObject<CharacterHandle | null
           .catch(fail);
       }
     }, POLL_MS);
+    poll.current = timer;
   };
 
   const begin = async () => {
     if (active.current) return;
+    // iOS only lets an app start the microphone while it's on screen. If we
+    // were launched in the background (e.g. from Xcode with the phone locked),
+    // wait; the AppState listener below starts us when the app comes forward.
+    if (AppState.currentState !== "active") {
+      log("waiting until the app is on screen");
+      pausedByBackground.current = true;
+      setState("paused");
+      return;
+    }
     const perm = await requestRecordingPermissionsAsync();
     log(`mic permission: ${perm.status}, server: ${serverUrl()}`);
     if (!perm.granted) {
       setState("paused");
-      setDetail("Mika needs the microphone. Allow it in iPhone Settings → Expo Go, then tap Resume.");
+      setDetail("Mika needs the microphone. Allow it in iPhone Settings → Mika Planner, then tap Resume.");
       return;
     }
     active.current = true;
@@ -380,6 +417,8 @@ export function useVoiceConversation(character: RefObject<CharacterHandle | null
       // recorder/player afterwards.
       mounted.current = false;
       active.current = false;
+      listenTurn.current++;
+      if (micRetry.current) clearTimeout(micRetry.current);
       clearPoll();
       endPlayback.current?.();
       deactivateKeepAwake(KEEP_AWAKE_TAG).catch(() => {});

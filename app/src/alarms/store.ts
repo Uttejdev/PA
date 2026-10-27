@@ -119,6 +119,7 @@ export async function rescheduleAlarmNotifications() {
     console.warn("[alarms] AlarmKit failed, using notifications", e);
     return false;
   });
+  console.log(`[alarms] ${alarms.length} alarm(s), ringing via ${usingAlarmKit ? "AlarmKit (real iPhone alarms)" : "notifications"}`);
   if (usingAlarmKit) return;
   const byId = new Map(alarms.map((a) => [a.id, a]));
   for (const p of planNotifications(alarms, Date.now())) {

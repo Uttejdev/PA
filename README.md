@@ -66,7 +66,7 @@ finish before running the next.
 Go to the server folder:
 
 ```bash
-cd ~/Documents/GitHub/PA/server
+cd ~/Developer/PA/server
 ```
 
 Switch to Node 22 (if it says "not installed", run `nvm install 22` and then this again):
@@ -120,7 +120,7 @@ phone can't reach it.
 Open a second Terminal window or tab (⌘T), then:
 
 ```bash
-cd ~/Documents/GitHub/PA/app
+cd ~/Developer/PA/app
 ```
 
 ```bash
