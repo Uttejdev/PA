@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Alert, FlatList, Pressable, StyleSheet, Switch, Text, View } from "react-native";
 import { nextOccurrences, type Alarm } from "../alarms/schedule";
-import { deleteAlarm, describeAlarm, loadAlarms, onAlarmsChanged, setAlarmEnabled } from "../alarms/store";
+import { alarmKitActive, deleteAlarm, describeAlarm, loadAlarms, onAlarmsChanged, setAlarmEnabled } from "../alarms/store";
 
 // See, switch off and delete alarms. New ones are set by asking Mika.
 export default function AlarmsScreen() {
@@ -32,8 +32,9 @@ export default function AlarmsScreen() {
       keyExtractor={(a) => String(a.id)}
       ListHeaderComponent={
         <Text style={styles.hint}>
-          Ask Mika to set one, like “wake me up at 7 on weekdays”. Alarms ring loudest with the app open (it works in silent
-          mode too); when the app is closed you get alarm notifications instead.
+          {alarmKitActive()
+            ? "Ask Mika to set one, like “wake me up at 7 on weekdays”. These are real iPhone alarms: they ring on the lock screen, in silent mode and Focus, even when the app is closed."
+            : "Ask Mika to set one, like “wake me up at 7 on weekdays”. Alarms ring loudest with the app open (it works in silent mode too); when the app is closed you get alarm notifications instead. Real iPhone alarms need Mika's own build (see README)."}
         </Text>
       }
       ListEmptyComponent={<Text style={styles.empty}>No alarms yet.</Text>}

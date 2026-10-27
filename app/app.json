@@ -8,7 +8,10 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.example.mikaplanner"
+      "bundleIdentifier": "dev.mikaplanner.companion",
+      "infoPlist": {
+        "NSAlarmKitUsageDescription": "Mika sets real alarms for you, so they ring even when the app is closed or your phone is on silent."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -18,7 +21,7 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.example.mikaplanner"
+      "package": "dev.mikaplanner.companion"
     },
     "web": {
       "favicon": "./assets/favicon.png"

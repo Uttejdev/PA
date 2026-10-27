@@ -3,7 +3,7 @@ import * as Notifications from "expo-notifications";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
 import { dueOccurrence, type Alarm } from "./schedule";
-import { dismissAlarm, loadAlarms, registerAlarmCategory, rescheduleAlarmNotifications, snoozeAlarm } from "./store";
+import { alarmKitActive, dismissAlarm, loadAlarms, registerAlarmCategory, rescheduleAlarmNotifications, snoozeAlarm } from "./store";
 
 export type Ringing = { alarm: Alarm; occurrence: number };
 
@@ -44,6 +44,8 @@ export function useAlarmRinger(handlers: { onRing?: (r: Ringing) => void; onDone
   // Ring if an alarm is due and wasn't already stopped (fresh from the database).
   const ringIfDue = useCallback(
     async (only?: { alarmId: number; occurrence: number }) => {
+      // Real iPhone alarms ring by themselves; don't ring a second time in-app.
+      if (alarmKitActive()) return;
       const alarms = await loadAlarms();
       const due = dueOccurrence(alarms, Date.now());
       if (due && (!only || (only.alarmId === due.alarm.id && only.occurrence === due.occurrence))) await ring(due);

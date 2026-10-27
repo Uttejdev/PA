@@ -202,9 +202,40 @@ alarm at 7", "cancel my 7 o'clock alarm"), or tap **Alarms** (top right) to see,
 - **With the app closed or in the background:** you get an alarm notification every minute for 4 minutes. Tap it, or its
   Stop/Snooze buttons, to open Mika. These use the normal notification sound, so **silent mode and Focus will mute them**.
 
-For a real alarm clock, keep the app open overnight. An alarm that rings through silent mode with the app closed needs
-Apple's AlarmKit (iOS 26), which only works in a standalone build of the app, not in Expo Go. That's planned for when the
-app becomes a development build.
+**Real iPhone alarms (recommended):** in Mika's own build (below) on iOS 26 or newer, alarms use Apple's AlarmKit. They
+ring like the Clock app (lock screen, silent mode, Focus, app closed) with Stop and Snooze (9 minutes). The in-app chime
+and alarm notifications are then switched off, so nothing rings twice. In Expo Go, the behaviour above is the fallback.
+
+## Mika's own build (instead of Expo Go)
+
+Expo Go can't load AlarmKit, so for real alarms you build Mika as her own app and install it on your iPhone with a free
+Apple ID. With a free Apple ID the app stops opening after 7 days; plug the phone in and run the build command again. A
+paid Apple Developer account ($99/year) removes that limit and is needed for the App Store later.
+
+One-time setup:
+
+1. Install **Xcode** from the Mac App Store, open it once, and let it install the **iOS** components it asks for.
+2. Point the command-line tools at Xcode (asks for your Mac password):
+
+   ```bash
+   sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+   ```
+
+3. In Xcode, open **Settings → Accounts**, click **+**, and sign in with your Apple ID.
+4. On the iPhone: **Settings → Privacy & Security → Developer Mode**, switch it on, and restart when asked.
+5. Connect the iPhone to the Mac with a cable and tap **Trust** on the phone.
+
+Build and install (from the `app` folder; the first build takes several minutes):
+
+```bash
+npx expo run:ios --device
+```
+
+Pick your iPhone from the list. If it asks for a development team, choose your **Personal Team**. The first time it opens,
+iOS may block it: go to **Settings → General → VPN & Device Management**, tap your Apple ID, and tap **Trust**.
+
+After that, start Expo as usual with `npx expo start` and open the **Mika Planner** app (not Expo Go) on the phone; it
+connects to your Mac the same way. To keep using Expo Go instead, press `s` in the Expo window to switch.
 
 ## Troubleshooting
 

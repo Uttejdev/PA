@@ -9,6 +9,7 @@
     "expo-audio": "~58.0.10",
     "expo-calendar": "~58.0.6",
     "expo-constants": "~58.0.13",
+    "expo-dev-client": "~58.0.15",
     "expo-file-system": "~58.0.11",
     "expo-keep-awake": "~58.0.3",
     "expo-linking": "~58.0.14",
@@ -21,6 +22,8 @@
     "jest-expo": "~58.0.12",
     "react": "19.3.0",
     "react-native": "0.88.0",
+    "react-native-nitro-ios-alarm-kit": "^1.0.41",
+    "react-native-nitro-modules": "^0.37.1",
     "react-native-safe-area-context": "~5.10.1",
     "react-native-screens": "~4.30.0",
     "react-native-webview": "14.0.1"

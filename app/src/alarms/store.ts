@@ -1,5 +1,6 @@
 import * as Notifications from "expo-notifications";
 import { getDb } from "../lib/db";
+import { syncAlarmKit } from "./alarmKit";
 import { describeAlarm, planNotifications, REPEATS, type Alarm, type Repeat } from "./schedule";
 
 type Row = {
@@ -97,9 +98,14 @@ async function changed() {
   listeners.forEach((fn) => fn());
 }
 
+let usingAlarmKit = false;
+/** True when real iPhone alarms (AlarmKit) are doing the ringing, not this app. */
+export const alarmKitActive = () => usingAlarmKit;
+
 /**
- * Replaces all pending alarm notifications with the current plan. Called on
- * every change and when the app opens, so the rolling week ahead stays filled.
+ * Hands the current alarms to the phone. In Mika's own build on iOS 26 that's
+ * AlarmKit (real system alarms); otherwise a rolling week of notification
+ * bursts. Called on every change and when the app opens.
  */
 export async function rescheduleAlarmNotifications() {
   const pending = await Notifications.getAllScheduledNotificationsAsync();
@@ -109,6 +115,11 @@ export async function rescheduleAlarmNotifications() {
       .map((n) => Notifications.cancelScheduledNotificationAsync(n.identifier)),
   );
   const alarms = await loadAlarms();
+  usingAlarmKit = await syncAlarmKit(alarms).catch((e) => {
+    console.warn("[alarms] AlarmKit failed, using notifications", e);
+    return false;
+  });
+  if (usingAlarmKit) return;
   const byId = new Map(alarms.map((a) => [a.id, a]));
   for (const p of planNotifications(alarms, Date.now())) {
     const alarm = byId.get(p.alarmId)!;
